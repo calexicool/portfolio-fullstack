@@ -10,30 +10,32 @@ const app = express()
 const PORT = process.env.PORT || 3001
 
 // CORS: можно оставить пустым для same-origin; или перечислить домены через запятую
+// --- CORS только для /api ---
+// список доменов можно задать через CORS_ORIGIN="https://a.com,https://b.com"
 const allow = (process.env.CORS_ORIGIN || '')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
 
-app.use(cors({
+const corsMw = cors({
   credentials: true,
   origin(origin, cb) {
-    // same-origin/серверные запросы
+    // same-origin/серверные запросы — пропускаем
     if (!origin) return cb(null, true);
 
     // если список не задан — разрешаем всё
     if (allow.length === 0) return cb(null, true);
 
-    const ok = allow.some(o =>
-      o === '*' ||
-      origin === o ||
-      (o === '*.github.io' && origin.endsWith('.github.io'))
-    );
+    const ok =
+      allow.includes('*') ||
+      allow.includes(origin) ||
+      (allow.includes('*.github.io') && origin.endsWith('.github.io'));
 
-    // НЕ бросаем Error (иначе Express вернёт 500). Просто не добавляем CORS-заголовки.
+    // ВАЖНО: не бросаем Error — просто не добавляем CORS-заголовки
     cb(null, ok);
-  }
-}));
+  },
+});
+
 
 
 app.use(express.json({ limit: '50mb' }))
