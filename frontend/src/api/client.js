@@ -1,47 +1,35 @@
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+// frontend/src/api/client.js
+const BASE = import.meta.env.VITE_API_BASE?.trim() || ""; // same-origin по умолчанию
 
-const defaultHeaders = { 'Content-Type': 'application/json' };
+async function j(method, url, body) {
+  const res = await fetch(`${BASE}${url}`, {
+    method, credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  // не бросаем исключения наверх — возвращаем {ok:false,error}
+  try {
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data?.error || res.statusText };
+    return data;
+  } catch {
+    return res.ok ? {} : { ok:false, error:"Bad JSON" };
+  }
+}
 
-export async function getMe(){
-  const r = await fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' });
-  return r.ok ? r.json() : null;
-}
-export async function login(email, password){
-  const r = await fetch(`${API_BASE}/api/auth/login`, { method: 'POST', headers: defaultHeaders, credentials:'include', body: JSON.stringify({ email, password }) });
-  return r.json();
-}
-export async function logout(){ await fetch(`${API_BASE}/api/auth/logout`, { method:'POST', credentials:'include' }); }
-export async function initAdmin(inviteCode, email, password){
-  const r = await fetch(`${API_BASE}/api/auth/init`, { method: 'POST', headers: defaultHeaders, credentials:'include', body: JSON.stringify({ inviteCode, email, password }) });
-  return r.json();
-}
-export async function getContent(){
-  const r = await fetch(`${API_BASE}/api/content`, { credentials:'include' });
-  if(!r.ok) throw new Error('Failed to load content'); return r.json();
-}
-export async function saveContent(content){
-  const r = await fetch(`${API_BASE}/api/content`, { method:'POST', headers: defaultHeaders, credentials:'include', body: JSON.stringify({ content }) });
-  return r.json();
-}
-export async function uploadFile(file){
-  const fd = new FormData(); fd.append('file', file);
-  const r = await fetch(`${API_BASE}/api/upload`, { method:'POST', body: fd, credentials:'include' });
-  return r.json();
-}
-export async function getComments(){ const r = await fetch(`${API_BASE}/api/comments`, { credentials:'include' }); return r.json(); }
-export async function addComment(payload){
-  const r = await fetch(`${API_BASE}/api/comments`, { method:'POST', headers: defaultHeaders, credentials:'include', body: JSON.stringify(payload) });
-  return r.json();
-}
-export async function likeComment(id){
-  const r = await fetch(`${API_BASE}/api/comments/like`, { method:'POST', headers: defaultHeaders, credentials:'include', body: JSON.stringify({ id }) });
-  return r.json();
-}
-export async function modApprove(id){
-  const r = await fetch(`${API_BASE}/api/comments/approve`, { method:'POST', headers: defaultHeaders, credentials:'include', body: JSON.stringify({ id }) });
-  return r.json();
-}
-export async function modRemove(id){
-  const r = await fetch(`${API_BASE}/api/comments/remove`, { method:'POST', headers: defaultHeaders, credentials:'include', body: JSON.stringify({ id }) });
-  return r.json();
-}
+// Контент (редактируемые тексты/картинки)
+export const getContent   = ()            => j("GET",  "/api/content");
+export const saveContent  = (content)     => j("POST", "/api/content", { content });
+
+// Комментарии
+export const getComments  = ()                     => j("GET",  "/api/comments");
+export const addComment   = (payload)              => j("POST", "/api/comments", payload);
+export const likeComment  = (id)                   => j("POST", `/api/comments/${id}/like`);
+export const modApprove   = (id)                   => j("POST", `/api/comments/${id}/approve`);
+export const modRemove    = (id)                   => j("POST", `/api/comments/${id}/remove`);
+
+// Аутентификация (CMS)
+export const initAdmin    = (payload)              => j("POST", "/api/auth/init", payload);
+export const login        = (payload)              => j("POST", "/api/auth/login", payload);
+export const me           = ()                     => j("GET",  "/api/auth/me");
+export const logout       = ()                     => j("POST", "/api/auth/logout");

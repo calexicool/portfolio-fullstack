@@ -6,8 +6,10 @@ import Background3D from './components/Background3D'
 import EditableText from './components/EditableText'
 import EditableImage from './components/EditableImage'
 import Lightbox from './components/Lightbox'
+import React, { Suspense } from "react";
+import ErrorBoundary from "./components/ErrorBoundary";
+const Comments = React.lazy(() => import("./components/Comments"));
 import ProjectsCarousel from './components/ProjectsCarousel'
-import Comments from "./components/Comments";
 import useInfiniteSections from './hooks/useInfiniteSections'
 import { getContent, saveContent, getMe } from './api/client'
 import CMSPanel from './components/CMSPanel'
@@ -153,13 +155,17 @@ export default function App(){
         </div>)}
       </div>
     </Section>,
-    <Section id="comments" key="comments">
-      <div className="grid h-full grid-rows-[auto_1fr] gap-6">
-        <h2 className="text-2xl font-semibold md:text-4xl"><EditableText admin={isAdmin} value={content.strings.commentsTitle} onChange={(v)=>save({...content, strings:{...content.strings, commentsTitle:v}})}/></h2>
-        {/* Комментарии компонент подключи при необходимости, оставить заготовку */}
-        {<Comments admin={isAdmin}/>}
-      </div>
-    </Section>
+    <section id="comments" className="section comments">
+  <h2>Комментарии</h2>
+  <ErrorBoundary>
+    <Suspense fallback={<div style={{opacity:.7}}>Комментарии загружаются…</div>}>
+      <Comments admin={isAdmin} />
+      {/* если у тебя переменная называется иначе (например, loggedIn), подставь её */}
+      {/* <Comments admin={loggedIn} /> */}
+    </Suspense>
+  </ErrorBoundary>
+</section>
+
   ]
 
   const renderTripled=(copyIndex)=>sections.map((s,i)=>React.cloneElement(s,{ key: `${copyIndex}-${i}` }))
