@@ -1,12 +1,11 @@
 /* eslint-disable */
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, Suspense } from 'react'
 import { Sun, Moon, MessageSquare, Mail, Settings } from 'lucide-react'
 import CustomCursor from './components/CustomCursor'
 import Background3D from './components/Background3D'
 import EditableText from './components/EditableText'
 import EditableImage from './components/EditableImage'
 import Lightbox from './components/Lightbox'
-import React, { Suspense } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 const Comments = React.lazy(() => import("./components/Comments"));
 import ProjectsCarousel from './components/ProjectsCarousel'
