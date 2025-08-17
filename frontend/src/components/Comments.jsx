@@ -1,135 +1,122 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { getComments, addComment, likeComment, modApprove, modRemove } from "../api/client";
+/* eslint-disable */
+import React, { useEffect, useState } from 'react';
 
-// аккуратно строим дерево, не падаем на мусорных данных
-function toTree(list = []) {
-  try {
-    const byId = new Map();
-    (Array.isArray(list) ? list : []).forEach(c => byId.set(c.id, { ...c, children: [] }));
-    const roots = [];
-    byId.forEach(n => {
-      if (n.parentId && byId.has(n.parentId)) byId.get(n.parentId).children.push(n);
-      else roots.push(n);
-    });
-    const sort = (a,b) => (new Date(b.createdAt).getTime()||0) - (new Date(a.createdAt).getTime()||0);
-    const walk = arr => arr.sort(sort).forEach(ch => walk(ch.children));
-    walk(roots);
-    return roots;
-  } catch {
-    return [];
-  }
-}
+const api = async (url, opts = {}) => {
+  const res = await fetch(url, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+};
 
-function Btn({ onClick, children, danger, ok }) {
-  const base = "inline-flex items-center gap-1 rounded-lg border px-2 py-1";
-  const hover = " hover:bg-neutral-900/5 dark:hover:bg-white/10";
-  const tone = danger ? " text-rose-700 dark:text-rose-400"
-            : ok ? " text-emerald-700 dark:text-emerald-400"
-            : "";
-  return <button onClick={onClick} className={base + hover + tone}>{children}</button>;
-}
+export default function Comments({ admin }) {
+  const [list, setList] = useState([]);
+  const [text, setText] = useState('');
+  const [pending, setPending] = useState(false);
 
-function Item({ node, onReply, onLike, admin, onApprove, onRemove }) {
-  return (
-    <div className="rounded-xl border p-3">
-      <div className="mb-1 text-sm opacity-70">
-        {node.name || "Гость"} • {node.createdAt ? new Date(node.createdAt).toLocaleString() : ""}
-        {node.approved === false && (
-          <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900">на модерации</span>
-        )}
-      </div>
-      <div className="whitespace-pre-wrap leading-relaxed">{node.text}</div>
-      <div className="mt-2 flex flex-wrap gap-3 text-sm">
-        <Btn onClick={() => onReply(node)}>Ответить</Btn>
-        <Btn onClick={() => onLike(node)}>👍 {node.likes || 0}</Btn>
-        {admin && node.approved === false && <Btn ok onClick={() => onApprove(node)}>Одобрить</Btn>}
-        {admin && <Btn danger onClick={() => onRemove(node)}>Удалить</Btn>}
-      </div>
-
-      {Array.isArray(node.children) && node.children.length > 0 && (
-        <div className="mt-3 space-y-3 border-l pl-3">
-          {node.children.map(ch => (
-            <Item key={ch.id} node={ch} onReply={onReply} onLike={onLike}
-                  admin={admin} onApprove={onApprove} onRemove={onRemove}/>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function Comments({ admin = false }) {
-  const [list, setList]   = useState([]);
-  const [busy, setBusy]   = useState(false);
-  const [name, setName]   = useState("");
-  const [text, setText]   = useState("");
-  const [replyTo, setRT]  = useState(null);
-  const [err, setErr]     = useState("");
-
-  async function load() {
-    setErr("");
+  const load = async () => {
     try {
-      const data = await getComments();
+      const data = await api('/api/comments');
       setList(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error(e);
-      setList([]); // не падаем, просто пусто
-      setErr("Не удалось загрузить комментарии");
+      console.error('comments load', e);
     }
-  }
+  };
 
   useEffect(() => { load(); }, []);
-  const tree = useMemo(() => toTree(list), [list]);
 
-  async function submit(e) {
+  const submit = async (e) => {
     e.preventDefault();
-    if (!text.trim() || busy) return;
-    setBusy(true); setErr("");
+    if (!text.trim()) return;
+    setPending(true);
     try {
-      const res = await addComment({ name: name.trim() || "Гость", text: text.trim(), parentId: replyTo?.id ?? null });
-      if (res?.ok) { setText(""); setRT(null); setList(res.list || []); }
-      else setErr(res?.error || "Ошибка отправки");
+      await api('/api/comments', { method: 'POST', body: JSON.stringify({ text }) });
+      setText('');
+      await load();
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const like = async (id) => {
+    try {
+      await api(`/api/comments/${id}/like`, { method: 'POST' });
+      await load();
     } catch (e) {
-      console.error(e); setErr("Сеть недоступна");
-    } finally { setBusy(false); }
-  }
-  const onLike    = async n => { try { const r = await likeComment(n.id);    if (r?.ok) setList(r.list || []);} catch {} };
-  const onApprove = async n => { try { const r = await modApprove(n.id);     if (r?.ok) setList(r.list || []);} catch {} };
-  const onRemove  = async n => { try { const r = await modRemove(n.id);      if (r?.ok) setList(r.list || []);} catch {} };
+      console.error(e);
+    }
+  };
+
+  const reply = async (parentId, replyText) => {
+    if (!replyText.trim()) return;
+    try {
+      await api('/api/comments', {
+        method: 'POST',
+        body: JSON.stringify({ text: replyText, parentId }),
+      });
+      await load();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const Item = ({ c, level = 0 }) => {
+    const [t, setT] = useState('');
+    return (
+      <div className="mb-3" style={{ marginLeft: level * 16 }}>
+        <div className="rounded-xl border p-3 bg-white/70 dark:bg-neutral-900/70">
+          <div className="text-sm opacity-70">{c.author || 'Гость'}</div>
+          <div className="mt-1 whitespace-pre-wrap">{c.text}</div>
+          <div className="mt-2 flex gap-4 text-sm opacity-70">
+            <button onClick={() => like(c.id)} className="hover:opacity-100">❤ {c.likes || 0}</button>
+            <details>
+              <summary className="cursor-pointer">Ответить</summary>
+              <div className="mt-2 flex gap-2">
+                <input
+                  className="flex-1 rounded border px-2 py-1"
+                  value={t}
+                  onChange={(e) => setT(e.target.value)}
+                  placeholder="Ваш ответ…"
+                />
+                <button
+                  className="rounded border px-3"
+                  onClick={() => { reply(c.id, t); setT(''); }}
+                >
+                  Отправить
+                </button>
+              </div>
+            </details>
+            {admin && c.hidden && <span className="text-amber-600">На модерации</span>}
+          </div>
+        </div>
+
+        {(c.replies || []).map((r) => (
+          <Item key={r.id} c={r} level={level + 1} />
+        ))}
+      </div>
+    );
+  };
 
   return (
-    <div className="space-y-6">
-      <form onSubmit={submit} className="rounded-2xl border p-4">
-        <div className="mb-2 text-lg font-medium">Оставить комментарий</div>
-        {replyTo && (
-          <div className="mb-3 rounded-lg bg-neutral-900/5 px-3 py-2 text-sm dark:bg-white/10">
-            Ответ на: <b>{replyTo.name || "Гость"}</b>{" "}
-            <button type="button" className="ml-2 text-rose-600 underline underline-offset-4" onClick={()=>setRT(null)}>
-              отменить
-            </button>
-          </div>
-        )}
-        <div className="mb-2 grid gap-3 md:grid-cols-2">
-          <input value={name} onChange={e=>setName(e.target.value)} placeholder="Ваше имя (необязательно)"
-                 className="rounded-xl border bg-white px-4 py-3 dark:bg-neutral-900"/>
-        </div>
-        <textarea value={text} onChange={e=>setText(e.target.value)} rows={4} placeholder="Текст…"
-                  className="mb-3 w-full rounded-xl border bg-white px-4 py-3 dark:bg-neutral-900"/>
-        {err && <div className="mb-3 text-sm text-rose-600">{err}</div>}
-        <button disabled={busy} className="rounded-xl bg-neutral-900 px-5 py-2 text-white dark:bg-white dark:text-neutral-900">
-          {busy ? "Отправка…" : "Отправить"}
+    <div className="mt-6">
+      <form onSubmit={submit} className="mb-4 flex gap-2">
+        <input
+          className="flex-1 rounded border px-3 py-2"
+          placeholder="Напишите комментарий…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <button disabled={pending} className="rounded border px-4 py-2">
+          {pending ? '…' : 'Отправить'}
         </button>
       </form>
 
-      {tree.length === 0 ? (
-        <div className="opacity-70">Пока нет комментариев — будьте первым!</div>
+      {list.length === 0 ? (
+        <div className="opacity-60">Пока нет комментариев</div>
       ) : (
-        <div className="space-y-3">
-          {tree.map(n => (
-            <Item key={n.id} node={n} onReply={setRT} onLike={onLike}
-                  admin={admin} onApprove={onApprove} onRemove={onRemove}/>
-          ))}
-        </div>
+        list.map((c) => <Item key={c.id} c={c} />)
       )}
     </div>
   );
