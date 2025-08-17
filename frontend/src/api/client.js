@@ -1,72 +1,75 @@
 /* eslint-disable */
-const API_BASE =
-  (typeof import.meta !== 'undefined' &&
-    import.meta.env &&
-    import.meta.env.VITE_API_BASE) ||
-  '';
+const API =
+  (import.meta?.env?.VITE_API_URL && import.meta.env.VITE_API_URL !== 'same-origin')
+    ? import.meta.env.VITE_API_URL.replace(/\/+$/,'')
+    : ''; // same-origin: фронт и бэк на одном домене
 
-const joinUrl = (base, path) => {
-  if (!base) return path;
-  if (base.endsWith('/') && path.startsWith('/')) return base + path.slice(1);
-  if (!base.endsWith('/') && !path.startsWith('/')) return `${base}/${path}`;
-  return base + path;
-};
-
-async function request(path, { method = 'GET', body, headers = {} } = {}) {
-  const res = await fetch(joinUrl(API_BASE, path), {
+async function http(path, { method = 'GET', body, headers } = {}) {
+  const res = await fetch(`${API}${path}`, {
     method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(headers || {}),
+    },
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: body != null ? JSON.stringify(body) : undefined,
+    body: body ? JSON.stringify(body) : undefined,
   });
-
-  const text = await res.text().catch(() => '');
+  // 204 — ок без тела
+  if (res.status === 204) return { ok: true };
   let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text || null; }
-
+  try { data = await res.json(); } catch {}
   if (!res.ok) {
-    const msg = (data && data.message) || `HTTP ${res.status}`;
-    const err = new Error(msg);
-    err.status = res.status; err.payload = data;
-    throw err;
+    const msg = data?.error || data?.message || `HTTP ${res.status}`;
+    const e = new Error(msg);
+    e.status = res.status;
+    e.payload = data;
+    throw e;
   }
   return data;
 }
 
-/* AUTH */
-export const getMe    = () => request('/api/auth/me');
-export const login    = (email, password) => request('/api/auth/login',  { method: 'POST', body: { email, password } });
-export const logout   = () => request('/api/auth/logout', { method: 'POST' });
-export const seedAdmin= (code, email, password) => request('/api/auth/seed',   { method: 'POST', body: { code, email, password } });
+/* -------- контент -------- */
+export const getContent   = () => http('/api/content');
+export const saveContent  = (content) => http('/api/content', { method:'POST', body:{ content } });
 
-// приглашения
-export const createInvite  = (role='admin') => request('/api/auth/invite', { method: 'POST', body: { role } });
-export const acceptInvite  = (code, email, password) => request('/api/auth/accept', { method: 'POST', body: { code, email, password } });
+/* -------- комментарии (если нужны) -------- */
+export const listComments   = () => http('/api/comments');
+export const addComment     = (payload) => http('/api/comments', { method:'POST', body:payload });
 
-/* CONTENT */
-export const getContent = () => request('/api/content');
-export const saveContent= (content) => request('/api/content', { method: 'POST', body: { content } });
-
-/* COMMENTS */
-export const getComments = () => request('/api/comments');
-export const postComment = ({ text, parentId=null }) => request('/api/comments', { method:'POST', body:{ text, parentId } });
-export const likeComment = (id) => request(`/api/comments/${id}/like`, { method:'POST' });
-
-/* UPLOAD */
+/* -------- загрузка файлов -------- */
 export async function uploadFile(file) {
-  const fd = new FormData();
-  fd.append('file', file);
-  const res = await fetch(joinUrl(API_BASE, '/api/upload'), {
-    method: 'POST',
-    credentials: 'include',
-    body: fd,
-  });
-  const text = await res.text().catch(()=> '');
-  let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text || null; }
-  if (!res.ok) {
-    const msg = (data && data.message) || `HTTP ${res.status}`;
-    const err = new Error(msg); err.status = res.status; err.payload = data; throw err;
-  }
-  return data; // { ok: true, url: '...' }
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API}/api/upload`, { method:'POST', body: form, credentials:'include' });
+  if (!res.ok) throw new Error('upload failed');
+  return await res.json(); // { ok:true, url:"/uploads/..." }
 }
+
+/* -------- auth -------- */
+export const getMe          = () => http('/api/auth/me');
+export const login          = (email, password) => http('/api/auth/login', { method:'POST', body:{ email, password } });
+export const logout         = () => http('/api/auth/logout', { method:'POST' });
+
+// «инициализация первого админа»
+export const initAdmin      = (code, email, password) => http('/api/auth/init', { method:'POST', body:{ code, email, password } });
+
+// управление администраторами
+export const listAdmins     = () => http('/api/auth/admins'); // [{id,email,role,createdAt}]
+export const createAdmin    = ({ code, email, password, role }) =>
+  http('/api/auth/admins', { method:'POST', body:{ code, email, password, role } });
+
+export const updateAdminRole = (id, role) =>
+  http(`/api/auth/admins/${encodeURIComponent(id)}`, { method:'PATCH', body:{ role } });
+
+export const deleteAdmin    = (id) =>
+  http(`/api/auth/admins/${encodeURIComponent(id)}`, { method:'DELETE' });
+
+export const issueCode      = () => http('/api/auth/issue-code', { method:'POST' });
+
+export default {
+  getContent, saveContent,
+  listComments, addComment,
+  uploadFile,
+  getMe, login, logout, initAdmin,
+  listAdmins, createAdmin, updateAdminRole, deleteAdmin, issueCode,
+};
