@@ -42,12 +42,16 @@ app.use('/api/upload', require('./src/routes/upload'))
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
 // ===== раздача фронта из ../frontend/dist =====
-const distDir = path.resolve(__dirname, '..', 'frontend', 'dist')
+const path = require('path');
+const fs = require('fs');
+// ...
+const distDir = path.resolve(__dirname, '..', 'frontend', 'dist');
 if (fs.existsSync(distDir)) {
-  app.use(express.static(distDir, { index: 'index.html', maxAge: '1h' }))
-  app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')))
+  app.use(express.static(distDir, { index: 'index.html', maxAge: '1h' }));
+  app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
 } else {
-  console.log('[static] dist not found:', distDir)
+  console.log('[static] dist not found:', distDir);
 }
+
 
 app.listen(PORT, () => console.log(`Server listening on port ${PORT}`))
