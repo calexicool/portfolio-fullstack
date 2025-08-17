@@ -1,21 +1,46 @@
 // frontend/src/api/client.js
-const BASE = import.meta.env.VITE_API_BASE?.trim() || ""; // same-origin по умолчанию
+const BASE = import.meta.env.VITE_API_BASE?.trim() || "";
 
-async function j(method, url, body) {
-  const res = await fetch(`${BASE}${url}`, {
-    method, credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  // не бросаем исключения наверх — возвращаем {ok:false,error}
+// ... твои функции j(), getContent, saveContent, getComments и т.д.
+
+// === Загрузка файла (использует /api/upload, возвращает {ok, url}) ===
+export async function uploadFile(file) {
   try {
-    const data = await res.json();
-    if (!res.ok) return { ok: false, error: data?.error || res.statusText };
-    return data;
-  } catch {
-    return res.ok ? {} : { ok:false, error:"Bad JSON" };
+    const fd = new FormData();
+    fd.append("file", file);
+
+    const res = await fetch(`${BASE}/api/upload`, {
+      method: "POST",
+      credentials: "include",
+      body: fd, // НЕ ставим Content-Type вручную — браузер проставит boundary
+    });
+
+    let data = null;
+    try { data = await res.json(); } catch {}
+
+    if (!res.ok) {
+      return { ok: false, error: data?.error || res.statusText || "Upload failed" };
+    }
+
+    // пытаемся понять адрес загруженного файла из разных возможных полей
+    let url =
+      data?.url ||
+      data?.path ||
+      (data?.filename ? `/uploads/${data.filename}` : null) ||
+      data?.file?.url ||
+      data?.file?.path ||
+      null;
+
+    if (!url) {
+      return { ok: false, error: "Upload succeeded but URL not returned" };
+    }
+    return { ok: true, url };
+  } catch (e) {
+    console.error("uploadFile error:", e);
+    return { ok: false, error: "Network error" };
   }
 }
+
 
 // Контент (редактируемые тексты/картинки)
 export const getContent   = ()            => j("GET",  "/api/content");
