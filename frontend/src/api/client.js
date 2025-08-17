@@ -1,62 +1,114 @@
-// frontend/src/api/client.js
-const BASE = import.meta.env.VITE_API_BASE?.trim() || "";
+/* eslint-disable */
 
-// ... твои функции j(), getContent, saveContent, getComments и т.д.
+/**
+ * Базовый адрес API:
+ * - по умолчанию same-origin (пустая строка)
+ * - можно переопределить через VITE_API_BASE в .env, например:
+ *   VITE_API_BASE=https://portfolio-fullstack-hpym.onrender.com
+ */
+const API_BASE =
+  (typeof import.meta !== 'undefined' &&
+    import.meta.env &&
+    import.meta.env.VITE_API_BASE) ||
+  '';
 
-// === Загрузка файла (использует /api/upload, возвращает {ok, url}) ===
-export async function uploadFile(file) {
+const joinUrl = (base, path) => {
+  if (!base) return path;
+  if (base.endsWith('/') && path.startsWith('/')) return base + path.slice(1);
+  if (!base.endsWith('/') && !path.startsWith('/')) return `${base}/${path}`;
+  return base + path;
+};
+
+/** Общий JSON-запрос (credentials: include для cookie-сессии) */
+async function request(path, { method = 'GET', body, headers = {} } = {}) {
+  const res = await fetch(joinUrl(API_BASE, path), {
+    method,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers,
+    },
+    body: body != null ? JSON.stringify(body) : undefined,
+  });
+
+  // Пытаемся прочитать JSON, но не падаем, если его нет
+  let data = null;
+  const text = await res.text().catch(() => '');
   try {
-    const fd = new FormData();
-    fd.append("file", file);
-
-    const res = await fetch(`${BASE}/api/upload`, {
-      method: "POST",
-      credentials: "include",
-      body: fd, // НЕ ставим Content-Type вручную — браузер проставит boundary
-    });
-
-    let data = null;
-    try { data = await res.json(); } catch {}
-
-    if (!res.ok) {
-      return { ok: false, error: data?.error || res.statusText || "Upload failed" };
-    }
-
-    // пытаемся понять адрес загруженного файла из разных возможных полей
-    let url =
-      data?.url ||
-      data?.path ||
-      (data?.filename ? `/uploads/${data.filename}` : null) ||
-      data?.file?.url ||
-      data?.file?.path ||
-      null;
-
-    if (!url) {
-      return { ok: false, error: "Upload succeeded but URL not returned" };
-    }
-    return { ok: true, url };
-  } catch (e) {
-    console.error("uploadFile error:", e);
-    return { ok: false, error: "Network error" };
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text || null;
   }
+
+  if (!res.ok) {
+    const msg = data && data.message ? data.message : `HTTP ${res.status}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.payload = data;
+    throw err;
+  }
+  return data;
 }
 
+/* =================== AUTH =================== */
 
-// Контент (редактируемые тексты/картинки)
-export const getContent   = ()            => j("GET",  "/api/content");
-export const saveContent  = (content)     => j("POST", "/api/content", { content });
+export const getMe = () => request('/api/auth/me');
 
-// Комментарии
-export const getComments  = ()                     => j("GET",  "/api/comments");
-export const addComment   = (payload)              => j("POST", "/api/comments", payload);
-export const likeComment  = (id)                   => j("POST", `/api/comments/${id}/like`);
-export const modApprove   = (id)                   => j("POST", `/api/comments/${id}/approve`);
-export const modRemove    = (id)                   => j("POST", `/api/comments/${id}/remove`);
+export const login = (email, password) =>
+  request('/api/auth/login', { method: 'POST', body: { email, password } });
 
-// Аутентификация (CMS)
-export const initAdmin    = (payload)              => j("POST", "/api/auth/init", payload);
-export const login        = (payload)              => j("POST", "/api/auth/login", payload);
-export const me           = ()                     => j("GET",  "/api/auth/me");
-export const logout       = ()                     => j("POST", "/api/auth/logout");
+export const logout = () => request('/api/auth/logout', { method: 'POST' });
 
-export { me as getMe };
+export const seedAdmin = (code, email, password) =>
+  request('/api/auth/seed', { method: 'POST', body: { code, email, password } });
+
+/* ================== CONTENT ================= */
+
+export const getContent = () => request('/api/content');
+
+export const saveContent = (content) =>
+  request('/api/content', { method: 'POST', body: { content } });
+
+/* ================== COMMENTS =================
+   Используется компонентом Comments.jsx
+   -------------------------------------------- */
+
+export const getComments = () => request('/api/comments');
+
+export const postComment = ({ text, parentId = null }) =>
+  request('/api/comments', { method: 'POST', body: { text, parentId } });
+
+export const likeComment = (id) =>
+  request(`/api/comments/${id}/like`, { method: 'POST' });
+
+/* =================== UPLOAD ==================
+   Используется в EditableImage.jsx
+   -------------------------------------------- */
+
+export async function uploadFile(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(joinUrl(API_BASE, '/api/upload'), {
+    method: 'POST',
+    credentials: 'include',
+    body: fd, // не ставим Content-Type вручную — его выставит браузер
+  });
+
+  let data = null;
+  const text = await res.text().catch(() => '');
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text || null;
+  }
+
+  if (!res.ok) {
+    const msg = (data && data.message) || `HTTP ${res.status}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.payload = data;
+    throw err;
+  }
+  // ожидаемый формат: { ok: true, url: "https://.../uploads/xxx.jpg" }
+  return data;
+}
