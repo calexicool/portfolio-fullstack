@@ -13,20 +13,28 @@ const PORT = process.env.PORT || 3001
 const allow = (process.env.CORS_ORIGIN || '')
   .split(',')
   .map(s => s.trim())
-  .filter(Boolean)
+  .filter(Boolean);
 
 app.use(cors({
   credentials: true,
   origin(origin, cb) {
-    if (!origin || allow.length === 0) return cb(null, true)
+    // same-origin/серверные запросы
+    if (!origin) return cb(null, true);
+
+    // если список не задан — разрешаем всё
+    if (allow.length === 0) return cb(null, true);
+
     const ok = allow.some(o =>
       o === '*' ||
-      (o === '*.github.io' && origin.endsWith('.github.io')) ||
-      origin === o
-    )
-    cb(ok ? null : new Error('Not allowed by CORS'), ok)
+      origin === o ||
+      (o === '*.github.io' && origin.endsWith('.github.io'))
+    );
+
+    // НЕ бросаем Error (иначе Express вернёт 500). Просто не добавляем CORS-заголовки.
+    cb(null, ok);
   }
-}))
+}));
+
 
 app.use(express.json({ limit: '50mb' }))
 app.use(cookieParser())
@@ -48,12 +56,21 @@ app.use('/api/upload', require('./src/routes/upload'))
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
 // ===== Раздача фронта из ../frontend/dist (один домен) =====
-const distDir = path.resolve(__dirname, '..', 'frontend', 'dist')
+const distDir = require('path').resolve(__dirname, '..', 'frontend', 'dist');
+
 if (fs.existsSync(distDir)) {
-  app.use(express.static(distDir, { index: 'index.html', maxAge: '1h' }))
-  app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')))
+  // 1) ассеты
+  app.use('/assets', express.static(path.join(distDir, 'assets'), {
+    maxAge: '1y',
+    immutable: true
+  }));
+  // 2) остальные статические файлы + index.html
+  app.use(express.static(distDir, { index: 'index.html', maxAge: '1h' }));
+  // 3) SPA-фолбек
+  app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
 } else {
-  console.log('[static] dist not found:', distDir)
+  console.log('[static] dist not found:', distDir);
 }
+
 
 app.listen(PORT, () => console.log(`Server listening on port ${PORT}`))
