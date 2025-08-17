@@ -7,7 +7,7 @@ import EditableText from './components/EditableText'
 import EditableImage from './components/EditableImage'
 import Lightbox from './components/Lightbox'
 import ProjectsCarousel from './components/ProjectsCarousel'
-import Comments from './components/Comments'
+import Comments from "./components/Comments";
 import useInfiniteSections from './hooks/useInfiniteSections'
 import { getContent, saveContent, getMe } from './api/client'
 import CMSPanel from './components/CMSPanel'
@@ -157,8 +157,7 @@ export default function App(){
       <div className="grid h-full grid-rows-[auto_1fr] gap-6">
         <h2 className="text-2xl font-semibold md:text-4xl"><EditableText admin={isAdmin} value={content.strings.commentsTitle} onChange={(v)=>save({...content, strings:{...content.strings, commentsTitle:v}})}/></h2>
         {/* Комментарии компонент подключи при необходимости, оставить заготовку */}
-        {/* <Comments admin={isAdmin}/> */}
-        <div className="rounded-2xl border p-6 opacity-70">Комментарии перенесены в отдельную страницу/блок по желанию. Бэкенд уже готов.</div>
+        {<Comments admin={isAdmin}/>}
       </div>
     </Section>
   ]

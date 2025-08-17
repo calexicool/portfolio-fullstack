@@ -25,4 +25,11 @@ app.use('/api/comments', require('./src/routes/comments'))
 app.use('/api/upload', require('./src/routes/upload'))
 
 app.get('/api/health', (_req,res)=>res.json({ ok:true }))
+const staticDir = require('path').join(__dirname, '..', 'frontend', 'dist');
+const fs = require('fs');
+if (fs.existsSync(staticDir)) {
+  app.use(express.static(staticDir, { index: 'index.html', maxAge: '1h' }));
+  app.get('*', (_req, res) => res.sendFile(require('path').join(staticDir, 'index.html')));
+}
+
 app.listen(PORT, ()=>console.log(`API listening on http://127.0.0.1:${PORT}`))
