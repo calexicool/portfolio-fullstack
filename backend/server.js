@@ -9,53 +9,39 @@ require('dotenv').config()
 const app = express()
 const PORT = process.env.PORT || 3001
 
-// CORS: можно оставить пустым для same-origin; или перечислить домены через запятую
-// --- CORS только для /api ---
-// список доменов можно задать через CORS_ORIGIN="https://a.com,https://b.com"
+
 const allow = (process.env.CORS_ORIGIN || '')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
+  .split(',').map(s => s.trim()).filter(Boolean);
 
-const corsMw = cors({
-  credentials: true,
-  origin(origin, cb) {
-    // same-origin/серверные запросы — пропускаем
-    if (!origin) return cb(null, true);
+// мидлварь: если origin разрешён — применяем cors, иначе просто пропускаем без заголовков
+const maybeCors = (req, res, next) => {
+  const origin = req.headers.origin;
+  if (!origin) return next(); // same-origin / серверные
 
-    // если список не задан — разрешаем всё
-    if (allow.length === 0) return cb(null, true);
+  const allowed =
+    allow.length === 0 ||               // пусто = разрешаем всё
+    allow.includes('*') ||
+    allow.includes(origin) ||
+    (allow.includes('*.github.io') && origin.endsWith('.github.io'));
 
-    const ok =
-      allow.includes('*') ||
-      allow.includes(origin) ||
-      (allow.includes('*.github.io') && origin.endsWith('.github.io'));
+  if (!allowed) return next();          // ВАЖНО: просто идём дальше, БЕЗ cors()
 
-    // ВАЖНО: не бросаем Error — просто не добавляем CORS-заголовки
-    cb(null, ok);
-  },
-});
+  // допустим origin — навешиваем cors с нужными опциями
+  return cors({ origin, credentials: true })(req, res, next);
+};
 
+// … uploads как было
+app.use('/uploads', express.static(uploadsDir));
 
+// CORS только на API и через наш maybeCors
+app.use('/api', maybeCors);
+app.use('/api/auth', require('./src/routes/auth'));
+app.use('/api/content', require('./src/routes/content'));
+app.use('/api/comments', require('./src/routes/comments'));
+app.use('/api/upload', require('./src/routes/upload'));
 
-app.use(express.json({ limit: '50mb' }))
-app.use(cookieParser())
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-// простые логи
-app.use((req, _res, next) => { console.log(new Date().toISOString(), req.method, req.url); next() })
-
-// uploads (на Persistent Disk)
-const uploadsDir = path.join(__dirname, 'uploads')
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
-app.use('/uploads', express.static(uploadsDir))
-
-// API
-app.use('/api/auth', require('./src/routes/auth'))
-app.use('/api/content', require('./src/routes/content'))
-app.use('/api/comments', require('./src/routes/comments'))
-app.use('/api/upload', require('./src/routes/upload'))
-
-app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
 // ===== Раздача фронта из ../frontend/dist (один домен) =====
 const distDir = require('path').resolve(__dirname, '..', 'frontend', 'dist');
