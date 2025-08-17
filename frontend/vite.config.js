@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 export default defineConfig({
-  base: '/',        // один домен
+  base: '/portfolio-fullstack/',        // один домен
   plugins: [react()],
 })
