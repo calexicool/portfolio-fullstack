@@ -58,3 +58,5 @@ export const initAdmin    = (payload)              => j("POST", "/api/auth/init"
 export const login        = (payload)              => j("POST", "/api/auth/login", payload);
 export const me           = ()                     => j("GET",  "/api/auth/me");
 export const logout       = ()                     => j("POST", "/api/auth/logout");
+
+export { me as getMe };
