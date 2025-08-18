@@ -39,22 +39,41 @@ router.post('/like', async (req,res)=>{
   if(!list[i].voters.includes(mark)){ list[i].voters.push(mark); list[i].likes = (list[i].likes||0)+1; await writeJSON(files.comments, list) }
   res.json({ ok:true, list })
 })
-router.post('/approve', authRequired, async (req,res)=>{
-  await ensureInitialized()
-  const { id } = req.body || {}
-  const list = await readJSON(files.comments, [])
-  const i = list.findIndex(c=>c.id===id)
-  if(i<0) return res.status(404).json({ ok:false })
-  list[i].approved = true; await writeJSON(files.comments, list)
-  res.json({ ok:true, list })
-})
-router.post('/remove', authRequired, async (req,res)=>{
-  await ensureInitialized()
-  const { id } = req.body || {}
-  let list = await readJSON(files.comments, [])
-  const ids = new Set([id]); let changed=true
-  while(changed){ changed=false; for(const c of list){ if(c.parentId && ids.has(c.parentId) && !ids.has(c.id)){ ids.add(c.id); changed=true } } }
-  list = list.filter(c=>!ids.has(c.id)); await writeJSON(files.comments, list)
-  res.json({ ok:true, list })
-})
+const ALLOW = new Set(['owner','admin','editor']);
+
+router.post('/approve', optionalAuth, async (req, res) => {
+  await ensureInitialized();
+  if (!req.user || !ALLOW.has(req.user.role)) {
+    return res.status(401).send('unauthorized');
+  }
+  const { id } = req.body || {};
+  const list = await readJSON(files.comments, []);
+  const i = list.findIndex(c => c.id === id);
+  if (i < 0) return res.status(404).json({ ok:false });
+  list[i].approved = true;
+  await writeJSON(files.comments, list);
+  res.json({ ok:true, list });
+});
+
+router.post('/remove', optionalAuth, async (req, res) => {
+  await ensureInitialized();
+  if (!req.user || !ALLOW.has(req.user.role)) {
+    return res.status(401).send('unauthorized');
+  }
+  const { id } = req.body || {};
+  let list = await readJSON(files.comments, []);
+  const ids = new Set([id]); let changed = true;
+  while (changed) {
+    changed = false;
+    for (const c of list) {
+      if (c.parentId && ids.has(c.parentId) && !ids.has(c.id)) {
+        ids.add(c.id); changed = true;
+      }
+    }
+  }
+  list = list.filter(c => !ids.has(c.id));
+  await writeJSON(files.comments, list);
+  res.json({ ok:true, list });
+});
+
 module.exports = router
