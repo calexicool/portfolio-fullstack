@@ -151,26 +151,34 @@ export async function uploadFile(file) {
 }
 
 // --- comments --------------------------------------------------------------
+// --- comments --------------------------------------------------------------
+
+// admin=false/true параметр можно оставить — бэку всё равно.
+// Возвращаем массив независимо от формата.
 export async function listComments(all = false) {
-  const r = await json('GET', `/api/comments${all ? '?all=1' : ''}`);
+  const r = await json('GET', `/api/comments${all ? '' : ''}`);
   const d = await readJSON(r);
-  return d.comments || [];
+  return Array.isArray(d) ? d : (d.comments || []);
 }
 
 export async function addComment({ name, text, parentId = null }) {
   const r = await json('POST', '/api/comments', { name, text, parentId });
   const d = await readJSON(r);
-  return d.comment || d || {};
+  // бэк кладёт новый коммент в начало списка
+  const created = Array.isArray(d.list) ? d.list[0] : null;
+  return created || { id: null, name, text, approved: false };
 }
 
 export async function deleteComment(id) {
-  const r = await json('DELETE', `/api/comments/${id}`);
+  const r = await json('POST', '/api/comments/remove', { id });
   await readJSON(r);
   return true;
 }
 
-export async function approveComment(id, approved) {
-  const r = await json('PATCH', `/api/comments/${id}`, { approved });
-  const d = await readJSON(r);
-  return d.comment || d || {};
+export async function approveComment(id /*, approved */) {
+  // Бэк умеет только ставить approved=true
+  const r = await json('POST', '/api/comments/approve', { id });
+  await readJSON(r);
+  return true;
 }
+

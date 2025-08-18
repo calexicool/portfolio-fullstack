@@ -31,12 +31,27 @@ export default function Comments({ admin = false }) {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
 
+  const [warn, setWarn] = React.useState("");
+
   const refresh = React.useCallback(async () => {
+    setWarn("");
     try {
-      const list = await listComments(admin);
-      setItems(Array.isArray(list) ? list : []);
-    } catch (e) { console.error(e); }
+      let list = await listComments(admin);
+      if (!Array.isArray(list)) list = [];
+      // для гостей показываем только одобренные
+      if (!admin) list = list.filter(x => x.approved === true);
+      setItems(list);
+    } catch (e) {
+      console.error(e);
+      setItems([]);
+    }
   }, [admin]);
+  {admin && warn && (
+    <div className="mb-2 rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+      {warn}
+    </div>
+  )}
+
 
   React.useEffect(() => {
     refresh();
@@ -60,7 +75,7 @@ export default function Comments({ admin = false }) {
     try {
       const c = await addComment({ name: nm, text: tx });
       if (admin && c?.id) {
-        await approveComment(c.id, true);
+        await approveComment(c.id);
         await refresh();
       } else {
         const entry = {
@@ -146,19 +161,21 @@ export default function Comments({ admin = false }) {
 
             {admin && (
               <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => onApprove(c.id, !c.approved)}
-                  className={`rounded-md px-3 py-1 text-sm ${
-                    c.approved ? "bg-neutral-200 dark:bg-neutral-800" : "bg-emerald-600 text-white"
-                  }`}
-                >
-                  {c.approved ? "Снять" : "Одобрить"}
-                </button>
+                {!c.approved && (
+                  <button
+                    type="button"
+                    onClick={() => onApprove(c.id, true)}
+                    className="rounded-md bg-emerald-600 px-3 py-1 text-sm text-white"
+                    title="Одобрить"
+                  >
+                    Одобрить
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onDelete(c.id)}
                   className="rounded-md bg-rose-600 px-3 py-1 text-sm text-white"
+                  title="Удалить"
                 >
                   Удалить
                 </button>
