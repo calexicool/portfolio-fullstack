@@ -2,15 +2,17 @@
 const fs = require('fs');
 const path = require('path');
 
-const COOKIE_NAME = 'uid'; // <-- как в routes/auth.js
+const COOKIE_NAME = 'uid'; // та же кука, что в routes/auth.js
 const DB_PATH = path.join(__dirname, '../storage/admins.json');
 
 function readDB() {
   try { return JSON.parse(fs.readFileSync(DB_PATH, 'utf8')); }
   catch { return { users: [], invites: [] }; }
 }
+function normalizeRole(u) {
+  return (u && u.role ? String(u.role) : '').trim().toLowerCase();
+}
 
-// кладём user в req, если есть валидная кука
 function optionalAuth(req, _res, next) {
   const id = req.cookies?.[COOKIE_NAME];
   if (id) {
@@ -21,7 +23,6 @@ function optionalAuth(req, _res, next) {
   next();
 }
 
-// 401, если не залогинен
 function authRequired(req, res, next) {
   optionalAuth(req, res, () => {
     if (!req.user) return res.status(401).json({ error: 'unauthorized' });
@@ -29,11 +30,14 @@ function authRequired(req, res, next) {
   });
 }
 
-// 403, если не admin/owner/editor (используем в местах, где нужна модерация)
+// для модерации: owner/admin/editor
 function requireModerator(req, res, next) {
   optionalAuth(req, res, () => {
-    const ok = req.user && ['owner', 'admin', 'editor'].includes(req.user.role);
-    if (!ok) return res.status(403).json({ error: 'forbidden' });
+    const role = normalizeRole(req.user);
+    if (!role) return res.status(401).json({ error: 'unauthorized' });
+    if (!['owner', 'admin', 'editor'].includes(role)) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
     next();
   });
 }

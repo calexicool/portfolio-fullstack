@@ -7,6 +7,8 @@ const { optionalAuth, requireModerator } = require('../middleware/auth')
 const router = express.Router()
 
 const addLimiter = rateLimit({ windowMs: 15*1000, max: 3, standardHeaders: true, legacyHeaders: false })
+
+
 function fp(req){
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '0'
   const ua = req.headers['user-agent'] || ''

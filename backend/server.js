@@ -9,6 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(express.json({ limit: '50mb' }));
+app.set('trust proxy', 1); 
 app.use(cookieParser());
 
 // простые логи
