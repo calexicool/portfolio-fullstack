@@ -115,14 +115,20 @@ router.post('/login', async (req, res) => {
   const ok = await bcrypt.compare(String(password), user.passwordHash);
   if (!ok) return res.status(400).json({ error: 'bad-credentials' });
 
+  // auth.js (оба места: в /init и /login)
   res.cookie(COOKIE_NAME, user.id, {
-    httpOnly: true, sameSite: 'lax', secure: isProd, path: '/', maxAge: 1000 * 60 * 60 * 24 * 30,
+    httpOnly: true,
+    sameSite: 'none',   // <<< ВАЖНО для кросс-домена
+    secure: true,       // Render = https, без этого браузер не примет None
+    path: '/',
+    maxAge: 1000 * 60 * 60 * 24 * 30,
   });
+
   res.json({ ok: true, user: publicUser(user) });
 });
 
 router.post('/logout', (req, res) => {
-  res.clearCookie(COOKIE_NAME, { path: '/' });
+  res.clearCookie(COOKIE_NAME, { path: '/', sameSite: 'none', secure: true });
   res.json({ ok: true });
 });
 
