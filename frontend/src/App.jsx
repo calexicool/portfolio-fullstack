@@ -170,7 +170,8 @@ function AppInner() {
   useEffect(() => {
     refreshAuth();
   }, []);
-  const isAdmin = !!user?.isAdmin;
+  const roleToEdit = new Set(["owner", "admin", "editor"]);
+  const isAdmin = Boolean(user && (user.isAdmin === true || roleToEdit.has(user.role)));
 
   const [content, setContent] = useState(DEFAULT);
   useEffect(() => {
