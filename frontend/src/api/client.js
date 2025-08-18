@@ -151,34 +151,26 @@ export async function uploadFile(file) {
 }
 
 // --- comments --------------------------------------------------------------
-// --- comments --------------------------------------------------------------
-
-// admin=false/true параметр можно оставить — бэку всё равно.
-// Возвращаем массив независимо от формата.
-export async function listComments(all = false) {
-  const r = await json('GET', `/api/comments${all ? '' : ''}`);
+// --- comments ---
+export async function listComments() {
+  const r = await json('GET', '/api/comments');
   const d = await readJSON(r);
   return Array.isArray(d) ? d : (d.comments || []);
 }
-
 export async function addComment({ name, text, parentId = null }) {
   const r = await json('POST', '/api/comments', { name, text, parentId });
   const d = await readJSON(r);
-  // бэк кладёт новый коммент в начало списка
-  const created = Array.isArray(d.list) ? d.list[0] : null;
-  return created || { id: null, name, text, approved: false };
+  return Array.isArray(d.list) ? d.list[0] : null; // новый в начале списка
 }
-
+export async function approveComment(id) {
+  const r = await json('POST', '/api/comments/approve', { id });
+  await readJSON(r); // бросит ошибку при 401/404
+  return true;
+}
 export async function deleteComment(id) {
   const r = await json('POST', '/api/comments/remove', { id });
   await readJSON(r);
   return true;
 }
 
-export async function approveComment(id /*, approved */) {
-  // Бэк умеет только ставить approved=true
-  const r = await json('POST', '/api/comments/approve', { id });
-  await readJSON(r);
-  return true;
-}
 

@@ -91,14 +91,33 @@ export default function Comments({ admin = false }) {
       setErr(e.message || "Не удалось отправить комментарий");
     } finally { setBusy(false); }
   }
+  const [modBusy, setModBusy] = React.useState({}); // { [id]: 'approve' | 'delete' }
 
-  async function onApprove(id, next) {
-    if (!admin) return;
-    try { await approveComment(id, next); await refresh(); } catch {}
-  }
-  async function onDelete(id) {
-    if (!admin) return;
-    try { await deleteComment(id); await refresh(); } catch {}
+  async function onApprove(id) {
+    if (!admin || !id) return;
+    setErr("");
+    setModBusy((m) => ({ ...m, [id]: "approve" }));
+    try {
+      await approveComment(id);
+      await refresh();
+    } catch (e) {
+      setErr(e.message || `Не удалось одобрить (код ${e.status ?? ""})`);
+    } finally {
+      setModBusy((m) => { const { [id]:_, ...rest } = m; return rest; });
+    }
+   }
+    async function onDelete(id) {
+    if (!admin || !id) return;
+    setErr("");
+    setModBusy((m) => ({ ...m, [id]: "delete" }));
+    try {
+      await deleteComment(id);
+      await refresh();
+    } catch (e) {
+      setErr(e.message || `Не удалось удалить (код ${e.status ?? ""})`);
+    } finally {
+      setModBusy((m) => { const { [id]:_, ...rest } = m; return rest; });
+    }
   }
 
   React.useEffect(() => {
@@ -164,9 +183,9 @@ export default function Comments({ admin = false }) {
                 {!c.approved && (
                   <button
                     type="button"
-                    onClick={() => onApprove(c.id, true)}
-                    className="rounded-md bg-emerald-600 px-3 py-1 text-sm text-white"
-                    title="Одобрить"
+                    onClick={() => onApprove(c.id)}
+                    disabled={!!modBusy[c.id]}
+                    className="rounded-md bg-emerald-600 px-3 py-1 text-sm text-white disabled:opacity-50"
                   >
                     Одобрить
                   </button>
@@ -174,8 +193,8 @@ export default function Comments({ admin = false }) {
                 <button
                   type="button"
                   onClick={() => onDelete(c.id)}
-                  className="rounded-md bg-rose-600 px-3 py-1 text-sm text-white"
-                  title="Удалить"
+                  disabled={!!modBusy[c.id]}
+                  className="rounded-md bg-rose-600 px-3 py-1 text-sm text-white disabled:opacity-50"
                 >
                   Удалить
                 </button>
