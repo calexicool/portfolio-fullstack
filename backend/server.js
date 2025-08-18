@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3001;
 app.use(express.json({ limit: '50mb' }));
 app.set('trust proxy', 1); 
 app.use(cookieParser());
-
+app.use(cors({ origin: process.env.FRONT_ORIGIN, credentials: true }));
 // простые логи
 app.use((req, _res, next) => {
   console.log(new Date().toISOString(), req.method, req.url);
