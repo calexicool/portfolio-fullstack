@@ -15,9 +15,9 @@ import {
 export default function CMSPanel({
   open,
   onClose,
-  onLoggedIn,   // (optional) колбэк — включить режим редактирования в App
-  user,         // текущий пользователь (если App его хранит)
-  setUser,      // сеттер пользователя из App
+  onLoggedIn,   // (optional) колбэк — например, refreshAuth() в App
+  user,         // текущий пользователь из App (необяз.)
+  setUser,      // сеттер пользователя из App (необяз.)
 }) {
   const [tab, setTab] = useState('login'); // 'login' | 'add'
   const [busy, setBusy] = useState(false);
@@ -27,7 +27,7 @@ export default function CMSPanel({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const [firstCode, setFirstCode] = useState('72405');
+  const [firstCode, setFirstCode] = useState(''); // код инициализации
   const [firstEmail, setFirstEmail] = useState('');
   const [firstPass, setFirstPass] = useState('');
 
@@ -37,27 +37,42 @@ export default function CMSPanel({
   const [newRole, setNewRole] = useState('admin');
 
   const [admins, setAdmins] = useState([]);
+  const [hasAdmins, setHasAdmins] = useState(false);
+
   const [curUser, setCurUser] = useState(null);
   const loggedIn = !!curUser;
 
+  // при открытии тянем me + список админов
   useEffect(() => {
     if (!open) return;
     (async () => {
+      setErr('');
       try {
-        const me = await getMe();
-        setCurUser(me);
-        if (me && setUser) setUser(me);
-        if (me) refreshAdmins(); // подтянем список админов для второй вкладки
+        const [me, list] = await Promise.allSettled([getMe(), getAdmins()]);
+        if (me.status === 'fulfilled') {
+          setCurUser(me.value || null);
+          setUser?.(me.value || null);
+        }
+        if (list.status === 'fulfilled') {
+          const arr = Array.isArray(list.value) ? list.value : [];
+          setAdmins(arr);
+          setHasAdmins(arr.length > 0);
+        } else {
+          setAdmins([]);
+          setHasAdmins(false);
+        }
       } catch (_) {}
     })();
-  }, [open]);
+  }, [open, setUser]);
 
   async function refreshAdmins() {
     try {
       const list = await getAdmins();
       setAdmins(list);
-    } catch (_) {
+      setHasAdmins((list || []).length > 0);
+    } catch {
       setAdmins([]);
+      setHasAdmins(false);
     }
   }
 
@@ -68,9 +83,11 @@ export default function CMSPanel({
       await login(email.trim(), password);
       const me = await getMe();
       setCurUser(me);
-      if (setUser) setUser(me);
-      if (onLoggedIn) onLoggedIn();
+      setUser?.(me);
+      onLoggedIn?.();            // ← дайте сюда refreshAuth() из App
       await refreshAdmins();
+      // по желанию можно закрывать модалку:
+      // onClose?.();
     } catch (e) {
       setErr(e.message || 'Ошибка входа');
     } finally {
@@ -82,13 +99,18 @@ export default function CMSPanel({
     setErr('');
     setBusy(true);
     try {
-      await initFirstAdmin({ code: firstCode.trim(), email: firstEmail.trim(), password: firstPass, role: 'owner' });
+      await initFirstAdmin({
+        code: (firstCode || '').trim(),
+        email: firstEmail.trim(),
+        password: firstPass,
+        role: 'owner',
+      });
       const me = await getMe();
       setCurUser(me);
-      if (setUser) setUser(me);
-      if (onLoggedIn) onLoggedIn();
+      setUser?.(me);
+      onLoggedIn?.();
       await refreshAdmins();
-      setTab('add');
+      setTab('login'); // после инициализации возвращаемся на вход
     } catch (e) {
       setErr(e.message || 'Не удалось инициализировать');
     } finally {
@@ -101,7 +123,7 @@ export default function CMSPanel({
     setBusy(true);
     try {
       const { code } = await issueCode();
-      setInviteCode(code);
+      setInviteCode(code || '');
     } catch (e) {
       setErr(e.message || 'Не удалось получить код');
     } finally {
@@ -113,7 +135,12 @@ export default function CMSPanel({
     setErr('');
     setBusy(true);
     try {
-      await addAdmin({ code: inviteCode.trim(), email: newEmail.trim(), password: newPass, role: newRole });
+      await addAdmin({
+        code: (inviteCode || '').trim(),
+        email: newEmail.trim(),
+        password: newPass,
+        role: newRole,
+      });
       setInviteCode('');
       setNewEmail('');
       setNewPass('');
@@ -133,7 +160,7 @@ export default function CMSPanel({
       await refreshAdmins();
       const me = await getMe();
       setCurUser(me);
-      if (setUser) setUser(me);
+      setUser?.(me);
     } catch (e) {
       setErr(e.message || 'Не удалось изменить роль');
     } finally {
@@ -149,7 +176,7 @@ export default function CMSPanel({
       await refreshAdmins();
       const me = await getMe();
       setCurUser(me);
-      if (setUser) setUser(me);
+      setUser?.(me);
     } catch (e) {
       setErr(e.message || 'Не удалось удалить');
     } finally {
@@ -163,7 +190,7 @@ export default function CMSPanel({
     try {
       await logout();
       setCurUser(null);
-      if (setUser) setUser(null);
+      setUser?.(null);
     } catch (e) {
       setErr(e.message || 'Не удалось выйти');
     } finally {
@@ -172,6 +199,9 @@ export default function CMSPanel({
   }
 
   if (!open) return null;
+
+  // вкладку "Добавить админа" показываем только если админов ещё нет ИЛИ пользователь вошёл
+  const showAddTab = !hasAdmins || loggedIn;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-6" onMouseDown={onClose}>
@@ -190,12 +220,14 @@ export default function CMSPanel({
             >
               Войти
             </button>
-            <button
-              className={`rounded-xl px-3 py-1 ${tab === 'add' ? 'bg-white text-neutral-900' : 'bg-white/10'}`}
-              onClick={() => { setTab('add'); refreshAdmins(); }}
-            >
-              Добавить админа
-            </button>
+            {showAddTab && (
+              <button
+                className={`rounded-xl px-3 py-1 ${tab === 'add' ? 'bg-white text-neutral-900' : 'bg-white/10'}`}
+                onClick={() => { setTab('add'); refreshAdmins(); }}
+              >
+                Добавить админа
+              </button>
+            )}
           </div>
 
           {err && <div className="mb-3 rounded-lg bg-rose-600/20 px-3 py-2 text-rose-200">{err}</div>}
@@ -217,10 +249,19 @@ export default function CMSPanel({
                   </div>
                 ) : (
                   <>
-                    <input className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="email"
-                      value={email} onChange={(e)=>setEmail(e.target.value)} />
-                    <input className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="пароль" type="password"
-                      value={password} onChange={(e)=>setPassword(e.target.value)} />
+                    <input
+                      className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none"
+                      placeholder="email"
+                      value={email}
+                      onChange={(e)=>setEmail(e.target.value)}
+                    />
+                    <input
+                      className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none"
+                      placeholder="пароль"
+                      type="password"
+                      value={password}
+                      onChange={(e)=>setPassword(e.target.value)}
+                    />
                     <button className="rounded bg-white px-4 py-2 text-neutral-900" onClick={handleLogin} disabled={busy}>
                       {busy ? 'Вход…' : 'Войти'}
                     </button>
@@ -229,21 +270,34 @@ export default function CMSPanel({
               </div>
 
               <div className="rounded-lg bg-white/5 p-3 text-sm opacity-80">
-                Чтобы добавить ещё админа, администратор генерирует «код выдачи», а затем вы вводите его здесь вместе с email/паролем.
+                Чтобы добавить ещё админа, войдите, сгенерируйте «код выдачи», затем введите его вместе с email/паролем.
               </div>
 
-              {/* Блок для ПЕРВОГО админа (если проект ещё не инициализирован) */}
-              {!loggedIn && (
+              {/* ИНИЦИАЛИЗАЦИЯ: показываем только если админов ещё нет */}
+              {!loggedIn && !hasAdmins && (
                 <div className="md:col-span-2">
                   <div className="mt-6 rounded-lg border border-white/10 p-3">
                     <div className="mb-2 font-medium">Инициализация (первый админ)</div>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                      <input className="rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="код (INIT_CODE)"
-                        value={firstCode} onChange={(e)=>setFirstCode(e.target.value)} />
-                      <input className="rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="email"
-                        value={firstEmail} onChange={(e)=>setFirstEmail(e.target.value)} />
-                      <input className="rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="пароль" type="password"
-                        value={firstPass} onChange={(e)=>setFirstPass(e.target.value)} />
+                      <input
+                        className="rounded-lg bg-white/10 px-3 py-2 outline-none"
+                        placeholder="код (INIT_CODE)"
+                        value={firstCode}
+                        onChange={(e)=>setFirstCode(e.target.value)}
+                      />
+                      <input
+                        className="rounded-lg bg-white/10 px-3 py-2 outline-none"
+                        placeholder="email"
+                        value={firstEmail}
+                        onChange={(e)=>setFirstEmail(e.target.value)}
+                      />
+                      <input
+                        className="rounded-lg bg-white/10 px-3 py-2 outline-none"
+                        placeholder="пароль"
+                        type="password"
+                        value={firstPass}
+                        onChange={(e)=>setFirstPass(e.target.value)}
+                      />
                       <button className="rounded bg-white px-4 py-2 text-neutral-900" onClick={handleInit} disabled={busy}>
                         {busy ? 'Создание…' : 'Инициализировать'}
                       </button>
@@ -255,27 +309,52 @@ export default function CMSPanel({
           )}
 
           {/* ADD ADMIN */}
-          {tab === 'add' && (
+          {tab === 'add' && showAddTab && (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div className="space-y-3">
                 <div className="flex gap-2">
-                  <button className="rounded bg-white px-3 py-1 text-neutral-900" onClick={handleIssueCode} disabled={busy || !loggedIn}>
+                  <button
+                    className="rounded bg-white px-3 py-1 text-neutral-900"
+                    onClick={handleIssueCode}
+                    disabled={busy || !loggedIn}
+                  >
                     Сгенерировать код
                   </button>
-                  <input className="flex-1 rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="код"
-                         value={inviteCode} onChange={(e)=>setInviteCode(e.target.value)} />
+                  <input
+                    className="flex-1 rounded-lg bg-white/10 px-3 py-2 outline-none"
+                    placeholder="код"
+                    value={inviteCode}
+                    onChange={(e)=>setInviteCode(e.target.value)}
+                  />
                 </div>
 
-                <input className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="email нового админа"
-                       value={newEmail} onChange={(e)=>setNewEmail(e.target.value)} />
-                <input className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="пароль"
-                       type="password" value={newPass} onChange={(e)=>setNewPass(e.target.value)} />
-                <select className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none"
-                        value={newRole} onChange={(e)=>setNewRole(e.target.value)}>
+                <input
+                  className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none"
+                  placeholder="email нового админа"
+                  value={newEmail}
+                  onChange={(e)=>setNewEmail(e.target.value)}
+                />
+                <input
+                  className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none"
+                  placeholder="пароль"
+                  type="password"
+                  value={newPass}
+                  onChange={(e)=>setNewPass(e.target.value)}
+                />
+                <select
+                  className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none"
+                  value={newRole}
+                  onChange={(e)=>setNewRole(e.target.value)}
+                >
                   <option value="admin">admin</option>
                   <option value="editor">editor</option>
+                  <option value="viewer">viewer</option>
                 </select>
-                <button className="rounded bg-white px-4 py-2 text-neutral-900" onClick={handleAddAdmin} disabled={busy || !loggedIn}>
+                <button
+                  className="rounded bg-white px-4 py-2 text-neutral-900"
+                  onClick={handleAddAdmin}
+                  disabled={busy || !loggedIn}
+                >
                   {busy ? 'Добавление…' : 'Добавить'}
                 </button>
               </div>
@@ -287,7 +366,7 @@ export default function CMSPanel({
                   {admins.map((a) => (
                     <li key={a.id} className="flex items-center gap-2 rounded bg-white/5 px-3 py-2">
                       <div className="flex-1">
-                        <div className="font-medium">{a.email}</div>
+                        <div className="font-medium">{a.email || a.name || a.id}</div>
                         <div className="text-xs opacity-70">id: {a.id}</div>
                       </div>
                       <select
@@ -315,6 +394,23 @@ export default function CMSPanel({
               </div>
             </div>
           )}
+
+          {/* если вкладка add скрыта (уже есть админы) — всё равно покажем список */}
+          {tab === 'add' && !showAddTab && (
+            <div className="rounded-lg bg-white/5 p-3">
+              <div className="mb-2 font-medium">Администраторы</div>
+              {!admins.length && <div className="text-sm opacity-70">Список пуст</div>}
+              <ul className="space-y-2">
+                {admins.map((a) => (
+                  <li key={a.id} className="flex items-center justify-between rounded bg-white/5 px-3 py-2">
+                    <div className="font-medium">{a.email || a.name || a.id}</div>
+                    <div className="text-xs opacity-70">роль: {a.role}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
         </div>
       </div>
     </div>

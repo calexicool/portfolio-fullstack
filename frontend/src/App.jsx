@@ -52,7 +52,7 @@ const DEFAULT = {
       "https://images.unsplash.com/photo-1513245543132-31f507417b26?q=80&w=1200&auto=format&fit=crop",
   },
   projects: [],
-  photos: [],
+  photos: ["https://images.unsplash.com/photo-1513245543132-31f507417b26?q=80&w=1200&auto=format&fit=crop"],
 };
 
 function Section({ id, children }) {
@@ -580,11 +580,11 @@ function AppInner() {
       <CMSPanel
         open={cmsOpen}
         onClose={() => setCmsOpen(false)}
-        isAdmin={isAdmin}
-        content={c}
-        setContent={setContent}
-        refreshAuth={refreshAuth}
+        onLoggedIn={refreshAuth} // ← важно, чтобы появился карандаш
+        user={user}
+        setUser={setUser}
       />
+
       <Lightbox images={c?.photos ?? []} index={lbIdx} onClose={closeLB} onPrev={prevLB} onNext={nextLB} />
     </>
   );

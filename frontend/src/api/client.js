@@ -7,7 +7,7 @@ const BASE =
 
 // --- helpers ---------------------------------------------------------------
 const json = (method, url, body) =>
-  fetch(BASE + url, {
+  fetch((BASE || '') + url, {
     method,
     credentials: 'include', // важна кука сессии
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -18,7 +18,13 @@ const readJSON = async (res) => {
   let data = null;
   try {
     data = await res.json();
-  } catch (_) {}
+  } catch (_) {
+    // попробуем вытащить текст ошибки
+    try {
+      const t = await res.text();
+      if (t) data = { message: t };
+    } catch {}
+  }
   if (!res.ok) {
     const msg =
       (data && (data.error || data.message)) || `HTTP ${res.status}`;
@@ -30,21 +36,39 @@ const readJSON = async (res) => {
 };
 
 // --- auth ------------------------------------------------------------------
+// /api/auth/me -> { user }
 export async function getMe() {
   const r = await json('GET', '/api/auth/me');
   const d = await readJSON(r);
   return d.user || null;
 }
-export async function login(email, password) {
-  const r = await json('POST', '/api/auth/login', { email, password });
+
+/**
+ * Логин: поддерживает два вызова
+ * - login(email, password)
+ * - login({ email, password, code })  ← code опционален
+ * Бэкенд спокойно проигнорирует лишнее поле, если оно не нужно.
+ */
+export async function login(a, b) {
+  let payload;
+  if (typeof a === 'object' && a) {
+    const { email, password, code } = a;
+    payload = { email, password, code };
+  } else {
+    payload = { email: a, password: b };
+  }
+  const r = await json('POST', '/api/auth/login', payload);
   const d = await readJSON(r);
   return d.user || true;
 }
+
 export async function logout() {
   const r = await json('POST', '/api/auth/logout');
   await readJSON(r);
   return true;
 }
+
+// первичная инициализация: /api/auth/init
 export async function initFirstAdmin({ code, email, password, role = 'owner' }) {
   const r = await json('POST', '/api/auth/init', {
     code,
@@ -55,11 +79,13 @@ export async function initFirstAdmin({ code, email, password, role = 'owner' }) 
   const d = await readJSON(r);
   return d.user || true;
 }
+
 export async function issueCode() {
   const r = await json('POST', '/api/auth/issue-code');
   const d = await readJSON(r);
   return d; // { code, ttl }
 }
+
 export async function addAdmin({ code, email, password, role = 'admin' }) {
   const r = await json('POST', '/api/auth/add', {
     code,
@@ -70,21 +96,29 @@ export async function addAdmin({ code, email, password, role = 'admin' }) {
   const d = await readJSON(r);
   return d.user || true;
 }
+
 export async function getAdmins() {
   const r = await json('GET', '/api/auth/admins');
   const d = await readJSON(r);
   return d.users || [];
 }
+
 export async function setAdminRole(id, role) {
   const r = await json('PATCH', `/api/auth/admins/${id}`, { role });
   const d = await readJSON(r);
   return d.user || true;
 }
+
 export async function removeAdmin(id) {
   const r = await json('DELETE', `/api/auth/admins/${id}`);
   await readJSON(r);
   return true;
 }
+
+// --- алиасы для совместимости с CMSPanel из моих примеров ------------------
+// (ничего не ломают; просто удобные имена)
+export const listAdmins = getAdmins;
+export const setRole = setAdminRole;
 
 // --- content ---------------------------------------------------------------
 export async function getContent() {
@@ -92,6 +126,7 @@ export async function getContent() {
   const d = await readJSON(r);
   return d.content ?? d ?? {};
 }
+
 export async function saveContent(content) {
   const r = await json('POST', '/api/content', { content });
   await readJSON(r);
@@ -104,7 +139,7 @@ export async function uploadFile(file) {
   fd.append('file', file);
 
   // ВАЖНО: не ставить Content-Type вручную — браузер сам проставит boundary
-  const res = await fetch(BASE + '/api/upload', {
+  const res = await fetch((BASE || '') + '/api/upload', {
     method: 'POST',
     credentials: 'include',
     body: fd,
@@ -115,28 +150,27 @@ export async function uploadFile(file) {
   return { ok: true, url: data.url || data.path || data.location };
 }
 
-// --- comments (если используются) -----------------------------------------
 // --- comments --------------------------------------------------------------
-// listComments(all) — если all=true, сервер вернёт все (включая не одобренные) — для админов
 export async function listComments(all = false) {
   const r = await json('GET', `/api/comments${all ? '?all=1' : ''}`);
   const d = await readJSON(r);
   return d.comments || [];
 }
+
 export async function addComment({ name, text, parentId = null }) {
   const r = await json('POST', '/api/comments', { name, text, parentId });
   const d = await readJSON(r);
   return d.comment || d || {};
 }
+
 export async function deleteComment(id) {
   const r = await json('DELETE', `/api/comments/${id}`);
   await readJSON(r);
   return true;
 }
-// модерация
+
 export async function approveComment(id, approved) {
   const r = await json('PATCH', `/api/comments/${id}`, { approved });
   const d = await readJSON(r);
   return d.comment || d || {};
 }
-
