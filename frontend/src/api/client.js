@@ -116,13 +116,15 @@ export async function uploadFile(file) {
 }
 
 // --- comments (если используются) -----------------------------------------
-export async function listComments() {
-  const r = await json('GET', '/api/comments');
+// --- comments --------------------------------------------------------------
+// listComments(all) — если all=true, сервер вернёт все (включая не одобренные) — для админов
+export async function listComments(all = false) {
+  const r = await json('GET', `/api/comments${all ? '?all=1' : ''}`);
   const d = await readJSON(r);
   return d.comments || [];
 }
-export async function addComment(payload) {
-  const r = await json('POST', '/api/comments', payload);
+export async function addComment({ name, text, parentId = null }) {
+  const r = await json('POST', '/api/comments', { name, text, parentId });
   const d = await readJSON(r);
   return d.comment || d || {};
 }
@@ -131,3 +133,10 @@ export async function deleteComment(id) {
   await readJSON(r);
   return true;
 }
+// модерация
+export async function approveComment(id, approved) {
+  const r = await json('PATCH', `/api/comments/${id}`, { approved });
+  const d = await readJSON(r);
+  return d.comment || d || {};
+}
+
