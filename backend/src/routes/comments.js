@@ -3,7 +3,7 @@ const rateLimit = require('express-rate-limit')
 const crypto = require('crypto')
 const { nanoid } = require('nanoid')
 const { files, readJSON, writeJSON, ensureInitialized } = require('../utils/store')
-const { optionalAuth, authRequired } = require('../middleware/auth')
+const { optionalAuth, requireModerator } = require('../middleware/auth')
 const router = express.Router()
 
 const addLimiter = rateLimit({ windowMs: 15*1000, max: 3, standardHeaders: true, legacyHeaders: false })
@@ -41,7 +41,7 @@ router.post('/like', async (req,res)=>{
 })
 const ALLOW = new Set(['owner','admin','editor']);
 
-router.post('/approve', optionalAuth, async (req, res) => {
+router.post('/approve', requireModerator, async (req,res)=>{
   await ensureInitialized();
   if (!req.user || !ALLOW.has(req.user.role)) {
     return res.status(401).send('unauthorized');
@@ -55,7 +55,7 @@ router.post('/approve', optionalAuth, async (req, res) => {
   res.json({ ok:true, list });
 });
 
-router.post('/remove', optionalAuth, async (req, res) => {
+router.post('/remove',  requireModerator, async (req,res)=>{
   await ensureInitialized();
   if (!req.user || !ALLOW.has(req.user.role)) {
     return res.status(401).send('unauthorized');
