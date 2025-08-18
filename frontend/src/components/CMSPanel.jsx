@@ -1,315 +1,318 @@
-/* eslint-disable */
-import React, { useEffect, useMemo, useState } from 'react';
+/* frontend/src/components/CMSPanel.jsx */
+import React, { useEffect, useState } from 'react';
 import {
-  getMe, login, logout, initAdmin,
-  listAdmins, createAdmin, updateAdminRole, deleteAdmin, issueCode,
+  getMe,
+  login,
+  initFirstAdmin,
+  issueCode,
+  addAdmin,
+  getAdmins,
+  setAdminRole,
+  removeAdmin,
+  logout,
 } from '../api/client';
-import { X } from 'lucide-react';
-
-const ROLES = ['admin','editor','viewer'];
 
 export default function CMSPanel({
-  open, onClose,
-  edit, onToggleEdit,             // <- тумблер режима редактирования из App
-  onAuthed,                       // <- вызвать, когда вошли (обновить App)
+  open,
+  onClose,
+  onLoggedIn,   // (optional) колбэк — включить режим редактирования в App
+  user,         // текущий пользователь (если App его хранит)
+  setUser,      // сеттер пользователя из App
 }) {
-  const [me, setMe] = useState(null);
   const [tab, setTab] = useState('login'); // 'login' | 'add'
   const [busy, setBusy] = useState(false);
-  const [err,  setErr]  = useState('');
+  const [err, setErr] = useState('');
 
   // формы
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPass,  setLoginPass]  = useState('');
-  const [code,       setCode]       = useState('');
-  const [newEmail,   setNewEmail]   = useState('');
-  const [newPass,    setNewPass]    = useState('');
-  const [newRole,    setNewRole]    = useState('admin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
-  // управление списком админов
+  const [firstCode, setFirstCode] = useState('72405');
+  const [firstEmail, setFirstEmail] = useState('');
+  const [firstPass, setFirstPass] = useState('');
+
+  const [inviteCode, setInviteCode] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [newRole, setNewRole] = useState('admin');
+
   const [admins, setAdmins] = useState([]);
-  const [supportsAdminApi, setSupportsAdminApi] = useState(true);
+  const [curUser, setCurUser] = useState(null);
+  const loggedIn = !!curUser;
 
   useEffect(() => {
     if (!open) return;
     (async () => {
-      setErr('');
       try {
-        const user = await getMe().catch(() => null);
-        setMe(user);
-        if (user) {
-          // пробуем загрузить список админов
-          try {
-            const list = await listAdmins();
-            setAdmins(list || []);
-            setSupportsAdminApi(true);
-          } catch {
-            setSupportsAdminApi(false);
-          }
-        }
-      } catch (e) {
-        // ignore
-      }
+        const me = await getMe();
+        setCurUser(me);
+        if (me && setUser) setUser(me);
+        if (me) refreshAdmins(); // подтянем список админов для второй вкладки
+      } catch (_) {}
     })();
   }, [open]);
 
-  const isAuthed = !!me?.isAdmin;
-
-  async function handleLogin(e) {
-    e?.preventDefault();
-    setErr(''); setBusy(true);
-    try {
-      const user = await login(loginEmail.trim(), loginPass);
-      setMe(user);
-      onAuthed?.(user);
-    } catch (e) {
-      setErr(e.message || 'Не удалось войти');
-    } finally { setBusy(false); }
-  }
-
-  async function handleInit(e) {
-    e?.preventDefault();
-    setErr(''); setBusy(true);
-    try {
-      const user = await initAdmin(code.trim(), newEmail.trim(), newPass);
-      setMe(user);
-      onAuthed?.(user);
-    } catch (e) {
-      setErr(e.message || 'Не удалось создать администратора');
-    } finally { setBusy(false); }
-  }
-
-  async function handleLogout() {
-    setBusy(true);
-    try { await logout(); setMe(null); onAuthed?.(null); }
-    finally { setBusy(false); }
-  }
-
   async function refreshAdmins() {
-    try { const list = await listAdmins(); setAdmins(list || []); }
-    catch { /* может не быть на старом бэке */ }
+    try {
+      const list = await getAdmins();
+      setAdmins(list);
+    } catch (_) {
+      setAdmins([]);
+    }
   }
 
-  async function handleCreateAdmin(e) {
-    e?.preventDefault();
-    setErr(''); setBusy(true);
+  async function handleLogin() {
+    setErr('');
+    setBusy(true);
     try {
-      await createAdmin({ code: code.trim(), email: newEmail.trim(), password: newPass, role: newRole });
-      setCode(''); setNewEmail(''); setNewPass(''); setNewRole('editor');
+      await login(email.trim(), password);
+      const me = await getMe();
+      setCurUser(me);
+      if (setUser) setUser(me);
+      if (onLoggedIn) onLoggedIn();
       await refreshAdmins();
     } catch (e) {
-      setErr(e.message || 'Не удалось добавить админа');
-    } finally { setBusy(false); }
+      setErr(e.message || 'Ошибка входа');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function handleChangeRole(id, role) {
+  async function handleInit() {
+    setErr('');
     setBusy(true);
-    try { await updateAdminRole(id, role); await refreshAdmins(); }
-    finally { setBusy(false); }
-  }
-
-  async function handleRemove(id) {
-    if (!confirm('Удалить этого администратора?')) return;
-    setBusy(true);
-    try { await deleteAdmin(id); await refreshAdmins(); }
-    finally { setBusy(false); }
+    try {
+      await initFirstAdmin({ code: firstCode.trim(), email: firstEmail.trim(), password: firstPass, role: 'owner' });
+      const me = await getMe();
+      setCurUser(me);
+      if (setUser) setUser(me);
+      if (onLoggedIn) onLoggedIn();
+      await refreshAdmins();
+      setTab('add');
+    } catch (e) {
+      setErr(e.message || 'Не удалось инициализировать');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleIssueCode() {
-    setBusy(true); setErr('');
+    setErr('');
+    setBusy(true);
     try {
-      const res = await issueCode(); // { code: '72405-....' }
-      if (res?.code) {
-        navigator.clipboard?.writeText(res.code).catch(()=>{});
-        alert(`Код сгенерирован и скопирован в буфер:\n\n${res.code}`);
-      }
+      const { code } = await issueCode();
+      setInviteCode(code);
     } catch (e) {
-      setErr(e.message || 'Не удалось сгенерировать код');
-    } finally { setBusy(false); }
+      setErr(e.message || 'Не удалось получить код');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAddAdmin() {
+    setErr('');
+    setBusy(true);
+    try {
+      await addAdmin({ code: inviteCode.trim(), email: newEmail.trim(), password: newPass, role: newRole });
+      setInviteCode('');
+      setNewEmail('');
+      setNewPass('');
+      await refreshAdmins();
+    } catch (e) {
+      setErr(e.message || 'Не удалось добавить');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRoleChange(id, role) {
+    setErr('');
+    setBusy(true);
+    try {
+      await setAdminRole(id, role);
+      await refreshAdmins();
+      const me = await getMe();
+      setCurUser(me);
+      if (setUser) setUser(me);
+    } catch (e) {
+      setErr(e.message || 'Не удалось изменить роль');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemove(id) {
+    setErr('');
+    setBusy(true);
+    try {
+      await removeAdmin(id);
+      await refreshAdmins();
+      const me = await getMe();
+      setCurUser(me);
+      if (setUser) setUser(me);
+    } catch (e) {
+      setErr(e.message || 'Не удалось удалить');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleLogout() {
+    setErr('');
+    setBusy(true);
+    try {
+      await logout();
+      setCurUser(null);
+      if (setUser) setUser(null);
+    } catch (e) {
+      setErr(e.message || 'Не удалось выйти');
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="relative w-[min(980px,96vw)] rounded-2xl bg-neutral-950 text-neutral-50 shadow-2xl ring-1 ring-white/10">
-        <button onClick={onClose} className="absolute right-4 top-4 rounded-full p-1 hover:bg-white/10">
-          <X size={18}/>
-        </button>
-
-        <div className="flex items-center gap-3 border-b border-white/10 px-6 py-4">
-          <span className="text-lg font-semibold">CMS</span>
-          <div className="grow"/>
-          {isAuthed && (
-            <div className="flex items-center gap-3">
-              <label className="flex select-none items-center gap-2 text-sm opacity-80">
-                <input type="checkbox" className="h-4 w-4" checked={!!edit} onChange={()=>onToggleEdit?.(!edit)}/>
-                Режим редактирования
-              </label>
-              <button
-                onClick={handleLogout}
-                className="rounded-lg bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20"
-              >Выйти</button>
-            </div>
-          )}
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-6" onMouseDown={onClose}>
+      <div className="w-[min(980px,96vw)] rounded-2xl bg-neutral-900 text-white shadow-xl" onMouseDown={(e)=>e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <div className="text-lg font-semibold">CMS</div>
+          <button className="rounded px-2 py-1 hover:bg-white/10" onClick={onClose}>✕</button>
         </div>
 
-        {/* контент */}
-        <div className="grid gap-6 p-6 md:grid-cols-2">
-          {!isAuthed ? (
-            <>
-              {/* блок выбора */}
-              <div className="md:col-span-2">
-                <div className="inline-flex rounded-xl bg-white/10 p-1">
-                  <button
-                    onClick={()=>setTab('login')}
-                    className={`rounded-lg px-4 py-1.5 text-sm ${tab==='login'?'bg-white/20':''}`}
-                  >Войти</button>
-                  <button
-                    onClick={()=>setTab('add')}
-                    className={`rounded-lg px-4 py-1.5 text-sm ${tab==='add'?'bg-white/20':''}`}
-                  >Добавить админа</button>
-                </div>
-              </div>
+        <div className="px-5 pb-5 pt-3">
+          {/* табы */}
+          <div className="mb-4 flex gap-2">
+            <button
+              className={`rounded-xl px-3 py-1 ${tab === 'login' ? 'bg-white text-neutral-900' : 'bg-white/10'}`}
+              onClick={() => setTab('login')}
+            >
+              Войти
+            </button>
+            <button
+              className={`rounded-xl px-3 py-1 ${tab === 'add' ? 'bg-white text-neutral-900' : 'bg-white/10'}`}
+              onClick={() => { setTab('add'); refreshAdmins(); }}
+            >
+              Добавить админа
+            </button>
+          </div>
 
-              {/* Вход */}
-              {tab==='login' && (
-                <form onSubmit={handleLogin} className="space-y-3">
-                  <div className="text-sm opacity-80">Вход</div>
-                  <input
-                    value={loginEmail} onChange={e=>setLoginEmail(e.target.value)}
-                    placeholder="email"
-                    className="w-full rounded-lg bg-white/5 px-3 py-2 outline-none ring-1 ring-white/10 focus:ring-white/20"
-                  />
-                  <input
-                    type="password"
-                    value={loginPass} onChange={e=>setLoginPass(e.target.value)}
-                    placeholder="пароль"
-                    className="w-full rounded-lg bg-white/5 px-3 py-2 outline-none ring-1 ring-white/10 focus:ring-white/20"
-                  />
-                  <button
-                    disabled={busy}
-                    className="rounded-lg bg-white px-4 py-2 text-neutral-900 hover:opacity-90 disabled:opacity-50"
-                  >Войти</button>
-                </form>
-              )}
+          {err && <div className="mb-3 rounded-lg bg-rose-600/20 px-3 py-2 text-rose-200">{err}</div>}
 
-              {/* Добавить админа */}
-              {tab==='add' && (
-                <form onSubmit={handleCreateAdmin} className="space-y-3">
-                  <div className="text-sm opacity-80">Добавить администратора</div>
-                  <input
-                    value={code} onChange={e=>setCode(e.target.value)}
-                    placeholder="код"
-                    className="w-full rounded-lg bg-white/5 px-3 py-2 outline-none ring-1 ring-white/10 focus:ring-white/20"
-                  />
-                  <input
-                    value={newEmail} onChange={e=>setNewEmail(e.target.value)}
-                    placeholder="email"
-                    className="w-full rounded-lg bg-white/5 px-3 py-2 outline-none ring-1 ring-white/10 focus:ring-white/20"
-                  />
-                  <input
-                    type="password"
-                    value={newPass} onChange={e=>setNewPass(e.target.value)}
-                    placeholder="пароль"
-                    className="w-full rounded-lg bg-white/5 px-3 py-2 outline-none ring-1 ring-white/10 focus:ring-white/20"
-                  />
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm opacity-70">роль:</span>
-                    <select
-                      value={newRole} onChange={e=>setNewRole(e.target.value)}
-                      className="rounded-lg bg-white/5 px-3 py-2 outline-none ring-1 ring-white/10 focus:ring-white/20"
-                    >
-                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      disabled={busy}
-                      className="rounded-lg bg-white px-4 py-2 text-neutral-900 hover:opacity-90 disabled:opacity-50"
-                    >Добавить</button>
-                    <button
-                      type="button"
-                      onClick={handleInit}
-                      title="Если это самый первый админ в системе"
-                      className="rounded-lg border border-white/20 px-3 py-2 text-sm hover:bg-white/10"
-                    >Инициализировать (первый админ)</button>
-                  </div>
-                </form>
-              )}
-
-              <div className="rounded-xl bg-white/5 p-4 text-sm opacity-80">
-                Чтобы добавить ещё админа, администратор генерирует «код выдачи», а затем вы вводите
-                его здесь вместе с email/паролем.
-              </div>
-            </>
-          ) : (
-            <>
-              {/* панель администратора после входа */}
+          {/* LOGIN */}
+          {tab === 'login' && (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div className="space-y-3">
-                <div className="text-sm opacity-80">Выдать приглашение</div>
-                <button
-                  disabled={!supportsAdminApi || busy}
-                  onClick={handleIssueCode}
-                  className="rounded-lg bg-white px-4 py-2 text-neutral-900 hover:opacity-90 disabled:opacity-40"
-                >
-                  Сгенерировать код
-                </button>
-                {!supportsAdminApi && (
-                  <div className="text-xs opacity-70">
-                    На текущем бэкенде нет API для кодов/админов. Обнови бэкенд — тогда кнопка заработает.
-                  </div>
-                )}
-                <div className="text-xs opacity-70">
-                  Код копируется в буфер обмена автоматически.
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm opacity-80">Администраторы</div>
-                  <button
-                    onClick={refreshAdmins}
-                    disabled={!supportsAdminApi || busy}
-                    className="rounded-lg border border-white/20 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-40"
-                  >Обновить</button>
-                </div>
-
-                <div className="space-y-2">
-                  {(admins || []).map(a => (
-                    <div key={a.id} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2">
-                      <div>
-                        <div className="font-medium">{a.email}</div>
-                        <div className="text-xs opacity-60">{a.createdAt ? new Date(a.createdAt).toLocaleString() : ''}</div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={a.role}
-                          onChange={(e)=>handleChangeRole(a.id, e.target.value)}
-                          disabled={!supportsAdminApi || busy}
-                          className="rounded-lg bg-white/10 px-2 py-1 outline-none ring-1 ring-white/10"
-                        >
-                          {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-                        <button
-                          onClick={()=>handleRemove(a.id)}
-                          disabled={!supportsAdminApi || busy}
-                          className="rounded-lg border border-white/20 px-2 py-1 text-sm hover:bg-white/10 disabled:opacity-40"
-                        >Удалить</button>
-                      </div>
+                {loggedIn ? (
+                  <div className="rounded-lg bg-white/10 p-3">
+                    <div className="mb-2 text-sm opacity-80">Вы вошли как:</div>
+                    <div className="font-medium">{curUser?.email}</div>
+                    <div className="text-sm opacity-80">роль: {curUser?.role}</div>
+                    <div className="mt-3 flex gap-2">
+                      <button className="rounded bg-white px-3 py-1 text-neutral-900" onClick={handleLogout} disabled={busy}>
+                        Выйти
+                      </button>
                     </div>
-                  ))}
-                  {!admins?.length && (
-                    <div className="rounded-lg bg-white/5 p-3 text-sm opacity-70">Список пуст</div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <>
+                    <input className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="email"
+                      value={email} onChange={(e)=>setEmail(e.target.value)} />
+                    <input className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="пароль" type="password"
+                      value={password} onChange={(e)=>setPassword(e.target.value)} />
+                    <button className="rounded bg-white px-4 py-2 text-neutral-900" onClick={handleLogin} disabled={busy}>
+                      {busy ? 'Вход…' : 'Войти'}
+                    </button>
+                  </>
+                )}
               </div>
-            </>
+
+              <div className="rounded-lg bg-white/5 p-3 text-sm opacity-80">
+                Чтобы добавить ещё админа, администратор генерирует «код выдачи», а затем вы вводите его здесь вместе с email/паролем.
+              </div>
+
+              {/* Блок для ПЕРВОГО админа (если проект ещё не инициализирован) */}
+              {!loggedIn && (
+                <div className="md:col-span-2">
+                  <div className="mt-6 rounded-lg border border-white/10 p-3">
+                    <div className="mb-2 font-medium">Инициализация (первый админ)</div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                      <input className="rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="код (INIT_CODE)"
+                        value={firstCode} onChange={(e)=>setFirstCode(e.target.value)} />
+                      <input className="rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="email"
+                        value={firstEmail} onChange={(e)=>setFirstEmail(e.target.value)} />
+                      <input className="rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="пароль" type="password"
+                        value={firstPass} onChange={(e)=>setFirstPass(e.target.value)} />
+                      <button className="rounded bg-white px-4 py-2 text-neutral-900" onClick={handleInit} disabled={busy}>
+                        {busy ? 'Создание…' : 'Инициализировать'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
-          {err && (
-            <div className="md:col-span-2 rounded-lg bg-rose-600/15 p-3 text-sm text-rose-200">
-              {String(err)}
+          {/* ADD ADMIN */}
+          {tab === 'add' && (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <button className="rounded bg-white px-3 py-1 text-neutral-900" onClick={handleIssueCode} disabled={busy || !loggedIn}>
+                    Сгенерировать код
+                  </button>
+                  <input className="flex-1 rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="код"
+                         value={inviteCode} onChange={(e)=>setInviteCode(e.target.value)} />
+                </div>
+
+                <input className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="email нового админа"
+                       value={newEmail} onChange={(e)=>setNewEmail(e.target.value)} />
+                <input className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none" placeholder="пароль"
+                       type="password" value={newPass} onChange={(e)=>setNewPass(e.target.value)} />
+                <select className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none"
+                        value={newRole} onChange={(e)=>setNewRole(e.target.value)}>
+                  <option value="admin">admin</option>
+                  <option value="editor">editor</option>
+                </select>
+                <button className="rounded bg-white px-4 py-2 text-neutral-900" onClick={handleAddAdmin} disabled={busy || !loggedIn}>
+                  {busy ? 'Добавление…' : 'Добавить'}
+                </button>
+              </div>
+
+              <div className="rounded-lg bg-white/5 p-3">
+                <div className="mb-2 font-medium">Администраторы</div>
+                {!admins.length && <div className="text-sm opacity-70">Список пуст</div>}
+                <ul className="space-y-2">
+                  {admins.map((a) => (
+                    <li key={a.id} className="flex items-center gap-2 rounded bg-white/5 px-3 py-2">
+                      <div className="flex-1">
+                        <div className="font-medium">{a.email}</div>
+                        <div className="text-xs opacity-70">id: {a.id}</div>
+                      </div>
+                      <select
+                        className="rounded bg-white/10 px-2 py-1 text-sm outline-none"
+                        value={a.role}
+                        onChange={(e) => handleRoleChange(a.id, e.target.value)}
+                        disabled={busy || !loggedIn}
+                      >
+                        <option value="owner">owner</option>
+                        <option value="admin">admin</option>
+                        <option value="editor">editor</option>
+                        <option value="viewer">viewer</option>
+                      </select>
+                      <button
+                        className="rounded bg-rose-500 px-2 py-1 text-sm"
+                        onClick={() => handleRemove(a.id)}
+                        disabled={busy || !loggedIn}
+                        title="Удалить"
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           )}
         </div>
