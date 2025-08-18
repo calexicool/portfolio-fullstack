@@ -5,31 +5,44 @@ const crypto = require('crypto');
 const { nanoid } = require('nanoid');
 const fs = require('fs');
 const path = require('path');
-
 const { files, readJSON, writeJSON, ensureInitialized } = require('../utils/store');
 
 const router = express.Router();
 
-// --- локальные константы авторизации (та же логика, что в routes/auth.js)
+// === авторизация (совместимо с routes/auth.js) ============================
 const COOKIE_NAME = 'uid';
 const DB_PATH = path.join(__dirname, '../storage/admins.json');
+
 function readDB() {
   try { return JSON.parse(fs.readFileSync(DB_PATH, 'utf8')); }
   catch { return { users: [], invites: [] }; }
 }
+
+// парсим cookie даже без cookie-parser
+function readCookies(req) {
+  if (req.cookies) return req.cookies;
+  const header = req.headers?.cookie || '';
+  const out = {};
+  header.split(';').forEach(p => {
+    const i = p.indexOf('=');
+    if (i > -1) out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1));
+  });
+  return out;
+}
+
 function getUserFromReq(req) {
-  const id = req.cookies?.[COOKIE_NAME];
+  const id = readCookies(req)[COOKIE_NAME];
   if (!id) return null;
   const db = readDB();
   return db.users.find(u => u.id === id) || null;
 }
-function isModerator(user) {
-  const role = String(user?.role || '').trim().toLowerCase();
-  return ['owner', 'admin', 'editor'].includes(role);
+function isModerator(u) {
+  const r = String(u?.role || '').trim().toLowerCase();
+  return ['owner', 'admin', 'editor'].includes(r);
 }
 
-// --- защита от спама при добавлении
-const addLimiter = rateLimit({ windowMs: 15 * 1000, max: 3, standardHeaders: true, legacyHeaders: false });
+// === анти-спам для добавления =============================================
+const addLimiter = rateLimit({ windowMs: 15_000, max: 3, standardHeaders: true, legacyHeaders: false });
 function fp(req) {
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '0';
   const ua = req.headers['user-agent'] || '';
@@ -37,9 +50,9 @@ function fp(req) {
   return crypto.createHash('sha256').update(ip + ua + salt).digest('hex');
 }
 
-// ============ ROUTES ============
+// === маршруты =============================================================
 
-// Публичный список (гостям — только одобренные)
+// Публичный список: гостям — только approved; модераторам — все
 router.get('/', async (req, res) => {
   await ensureInitialized();
   const list = await readJSON(files.comments, []);
@@ -56,6 +69,7 @@ router.post('/', addLimiter, async (req, res) => {
     (s || '').toLowerCase().match(/(crypto|casino|viagra|xxx)/) ||
     ((s || '').match(/https?:\/\//g) || []).length > 2 ||
     (s || '').length > 2000;
+
   if (!text || bad(text)) return res.status(400).json({ ok: false, error: 'spam_or_empty' });
 
   const list = await readJSON(files.comments, []);
@@ -92,7 +106,7 @@ router.post('/like', async (req, res) => {
   res.json({ ok: true, list });
 });
 
-// Одобрить (только owner/admin/editor) — читаем куку здесь же
+// Одобрить (owner/admin/editor)
 router.post('/approve', async (req, res) => {
   await ensureInitialized();
   const user = getUserFromReq(req);
@@ -109,7 +123,7 @@ router.post('/approve', async (req, res) => {
   res.json({ ok: true, list });
 });
 
-// Удалить (только owner/admin/editor)
+// Удалить (owner/admin/editor)
 router.post('/remove', async (req, res) => {
   await ensureInitialized();
   const user = getUserFromReq(req);
@@ -123,10 +137,7 @@ router.post('/remove', async (req, res) => {
   while (changed) {
     changed = false;
     for (const c of list) {
-      if (c.parentId && ids.has(c.parentId) && !ids.has(c.id)) {
-        ids.add(c.id);
-        changed = true;
-      }
+      if (c.parentId && ids.has(c.parentId) && !ids.has(c.id)) { ids.add(c.id); changed = true; }
     }
   }
   list = list.filter(c => !ids.has(c.id));
