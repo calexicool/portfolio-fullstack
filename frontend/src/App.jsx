@@ -1,6 +1,6 @@
 /* eslint-disable */
 import React, { useEffect, useMemo, useRef, useState, Suspense } from "react";
-import { Sun, Moon, MessageSquare, Mail, Settings } from "lucide-react";
+import { Sun, Moon, MessageSquare, Mail, Settings, Pencil, Instagram } from "lucide-react";
 import CustomCursor from "./components/CustomCursor";
 import Background3D from "./components/Background3D";
 import EditableText from "./components/EditableText";
@@ -11,9 +11,19 @@ import ProjectsCarousel from "./components/ProjectsCarousel";
 import useInfiniteSections from "./hooks/useInfiniteSections";
 import { getContent, saveContent, getMe } from "./api/client";
 import CMSPanel from "./components/CMSPanel";
+import { EditModeProvider, useEditMode } from "./store/editMode";
+
+/** Телеграм-иконка (брендовой в lucide нет) */
+function TelegramIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" {...props}>
+      <path d="M9.18 15.3 9.36 19c.33 0 .47-.15.64-.34l1.53-1.47 3.18 2.34c.58.32 1 .15 1.15-.54l2.09-9.85c.19-.86-.33-1.26-.88-1.04L4.38 11.4c-.84.33-.83.79-.15.99l3.58 1.12 8.32-5.25c.39-.24.75-.11.45.13l-7.4 6.9z" fill="currentColor"/>
+    </svg>
+  );
+}
 
 const DEFAULT = {
-  site: { name: "Имя Фамилия", role: "Business Analyst / Product" },
+  site: { name: "Mikhail Myatishkin", role: "Business Analyst / Product" },
   socials: {
     email: "calexicool@ya.ru",
     instagram: "https://instagram.com/forevercalex",
@@ -41,26 +51,8 @@ const DEFAULT = {
     photo:
       "https://images.unsplash.com/photo-1513245543132-31f507417b26?q=80&w=1200&auto=format&fit=crop",
   },
-  projects: [
-    {
-      id: "p1",
-      title: "CRM для студсовета",
-      summary: "Сбор требований, юзкейсы, прототипы",
-      tags: ["BA", "Prototype"],
-      cover:
-        "https://images.unsplash.com/photo-1556157382-97eda2d62296?q=80&w=1400&auto=format&fit=crop",
-      link: "",
-      content: "Подробности проекта.",
-    },
-  ],
-  photos: [
-    {
-      src: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=1200&auto=format&fit=crop",
-      fit: "cover",
-      h: 240,
-      w: 100,
-    },
-  ],
+  projects: [],
+  photos: [],
 };
 
 function Section({ id, children }) {
@@ -75,7 +67,93 @@ function Section({ id, children }) {
   );
 }
 
-export default function App() {
+function TopBar({ c, isAdmin, setTheme, theme, onOpenCMS }) {
+  const { editMode, setEditMode } = useEditMode();
+  return (
+    <div className="fixed left-0 right-0 top-4 z-40 flex items-center justify-between px-6 md:px-10">
+      <div className="flex items-center gap-3 rounded-2xl bg-white/90 px-4 py-2 shadow backdrop-blur dark:bg-neutral-900/90">
+        <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+        <span className="font-semibold">
+          <EditableText
+            admin={isAdmin && editMode}
+            value={c?.site?.name ?? ""}
+            onChange={(v) => onOpenCMS("save", { path: ["site", "name"], value: v })}
+          />
+        </span>
+        <span className="hidden text-sm opacity-80 sm:inline">
+          <EditableText
+            admin={isAdmin && editMode}
+            value={c?.site?.role ?? ""}
+            onChange={(v) => onOpenCMS("save", { path: ["site", "role"], value: v })}
+          />
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {/* Соцсети — вернул */}
+        {c?.socials?.instagram && (
+          <a
+            href={c.socials.instagram}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl bg-white/90 p-2 shadow backdrop-blur hover:scale-105 dark:bg-neutral-900/90"
+            aria-label="Instagram"
+            data-cursor="hover"
+          >
+            <Instagram className="h-5 w-5" />
+          </a>
+        )}
+        {c?.socials?.telegram && (
+          <a
+            href={c.socials.telegram}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl bg-white/90 p-2 shadow backdrop-blur hover:scale-105 dark:bg-neutral-900/90"
+            aria-label="Telegram"
+            data-cursor="hover"
+          >
+            <TelegramIcon />
+          </a>
+        )}
+
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setEditMode(!editMode)}
+            className={
+              "flex items-center gap-2 rounded-xl px-3 py-2 shadow backdrop-blur " +
+              (editMode ? "bg-emerald-500 text-white" : "bg-white/90 dark:bg-neutral-900/90")
+            }
+            title="Режим редактирования"
+          >
+            <Pencil className="h-4 w-4" />
+            <span className="text-sm">{editMode ? "Редактирование" : "Просмотр"}</span>
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="rounded-xl bg-white/90 p-2 shadow backdrop-blur hover:scale-105 dark:bg-neutral-900/90"
+          aria-label="Theme"
+        >
+          {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenCMS("open")}
+          className="rounded-xl bg-white/90 p-2 shadow backdrop-blur hover:scale-105 dark:bg-neutral-900/90"
+          title="CMS"
+          aria-label="CMS"
+        >
+          <Settings className="h-5 w-5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AppInner() {
   const [theme, setTheme] = useState("dark");
   useEffect(() => {
     const html = document.documentElement;
@@ -94,7 +172,6 @@ export default function App() {
   }, []);
   const isAdmin = !!user?.isAdmin;
 
-  // безопасная загрузка контента
   const [content, setContent] = useState(DEFAULT);
   useEffect(() => {
     (async () => {
@@ -107,34 +184,35 @@ export default function App() {
     })();
   }, []);
   const c = useMemo(() => ({ ...DEFAULT, ...(content || {}) }), [content]);
-  const save = async (next) => {
+
+  const persistByPath = async (path, value) => {
+    const next = structuredClone(c);
+    let p = next;
+    for (let i = 0; i < path.length - 1; i++) p = p[path[i]] ?? (p[path[i]] = {});
+    p[path[path.length - 1]] = value;
     setContent(next);
     try {
-      await saveContent(next);
+      await saveContent(next); // бэкенд у тебя уже есть — ок
     } catch (e) {
       console.error(e);
     }
   };
 
-  const scrollerRef = useRef(null),
-    progressRef = useRef(0);
+  const [cmsOpen, setCmsOpen] = useState(false);
+  const handleCMS = (cmd, payload) => {
+    if (cmd === "open") setCmsOpen(true);
+    if (cmd === "save") persistByPath(payload.path, payload.value);
+  };
+
+  const { editMode } = useEditMode();
+  const canEdit = isAdmin && editMode;
+
+  const scrollerRef = useRef(null), progressRef = useRef(0);
   const [pUI, setPUI] = useState(0);
   const [idx, setIdx] = useState(0);
   const hoverLocalRef = useRef(false);
-  const { scrollToIndex, scrollToProgress } = useInfiniteSections(scrollerRef, progressRef, {
-    onIndex: setIdx,
-    onProgress: setPUI,
-    sectionsCount: 5,
-    hoverLocalRef,
-  });
 
-  const [lbIdx, setLbIdx] = useState(-1);
-  const closeLB = () => setLbIdx(-1);
-  const prevLB = () => setLbIdx((i) => (i > 0 ? i - 1 : (c.photos || []).length - 1));
-  const nextLB = () => setLbIdx((i) => (i + 1) % (c.photos || []).length);
-
-  const [cmsOpen, setCmsOpen] = useState(false);
-
+  // --- Секции ---
   const sections = [
     <Section id="home" key="home">
       <div className="grid h-full grid-rows-[1fr_auto] gap-10">
@@ -144,10 +222,10 @@ export default function App() {
             style={{ textShadow: "0 6px 24px rgba(0,0,0,.7), 0 0 2px rgba(0,0,0,.9)" }}
           >
             <EditableText
-              admin={isAdmin}
+              admin={canEdit}
               as="h1"
               value={c?.hero?.title ?? ""}
-              onChange={(v) => save({ ...c, hero: { ...(c.hero || {}), title: v } })}
+              onChange={(v) => persistByPath(["hero", "title"], v)}
             />
           </h1>
           <p
@@ -155,9 +233,9 @@ export default function App() {
             style={{ textShadow: "0 4px 18px rgba(0,0,0,.6)" }}
           >
             <EditableText
-              admin={isAdmin}
+              admin={canEdit}
               value={c?.hero?.subtitle ?? ""}
-              onChange={(v) => save({ ...c, hero: { ...(c.hero || {}), subtitle: v } })}
+              onChange={(v) => persistByPath(["hero", "subtitle"], v)}
             />
           </p>
           <div className="mt-2 flex flex-wrap gap-3">
@@ -167,9 +245,9 @@ export default function App() {
               className="rounded-2xl bg-white px-5 py-3 text-neutral-900 shadow hover:opacity-90"
             >
               <EditableText
-                admin={isAdmin}
+                admin={canEdit}
                 value={c?.strings?.heroProjectsBtn ?? "Проекты"}
-                onChange={(v) => save({ ...c, strings: { ...(c.strings || {}), heroProjectsBtn: v } })}
+                onChange={(v) => persistByPath(["strings", "heroProjectsBtn"], v)}
               />
             </button>
             <a
@@ -179,9 +257,9 @@ export default function App() {
             >
               <Mail className="mr-2 inline h-4 w-4" />
               <EditableText
-                admin={isAdmin}
+                admin={canEdit}
                 value={c?.strings?.heroWriteBtn ?? "Написать"}
-                onChange={(v) => save({ ...c, strings: { ...(c.strings || {}), heroWriteBtn: v } })}
+                onChange={(v) => persistByPath(["strings", "heroWriteBtn"], v)}
               />
             </a>
           </div>
@@ -192,19 +270,17 @@ export default function App() {
         >
           <div className="flex items-center gap-2">
             <EditableText
-              admin={isAdmin}
+              admin={canEdit}
               value={c?.strings?.heroScrollHint ?? ""}
-              onChange={(v) => save({ ...c, strings: { ...(c.strings || {}), heroScrollHint: v } })}
+              onChange={(v) => persistByPath(["strings", "heroScrollHint"], v)}
             />
           </div>
           <div className="flex items-center gap-2">
             <MessageSquare className="h-4 w-4" />
             <EditableText
-              admin={isAdmin}
+              admin={canEdit}
               value={c?.strings?.heroCommentsHint ?? ""}
-              onChange={(v) =>
-                save({ ...c, strings: { ...(c.strings || {}), heroCommentsHint: v } })
-              }
+              onChange={(v) => persistByPath(["strings", "heroCommentsHint"], v)}
             />
           </div>
         </div>
@@ -215,19 +291,19 @@ export default function App() {
       <div className="grid h-full grid-rows-[auto_1fr] gap-8">
         <h2 className="text-2xl font-semibold md:text-4xl">
           <EditableText
-            admin={isAdmin}
+            admin={canEdit}
             value={c?.about?.title ?? ""}
-            onChange={(v) => save({ ...c, about: { ...(c.about || {}), title: v } })}
+            onChange={(v) => persistByPath(["about", "title"], v)}
           />
         </h2>
         <div className="grid items-center gap-10 md:grid-cols-2">
           <div className="relative w-full">
             <EditableImage
-              admin={isAdmin}
+              admin={canEdit}
               src={c?.about?.photo ?? ""}
               alt="Моё фото"
               onImageClick={() => {}}
-              onChange={(v) => save({ ...c, about: { ...(c.about || {}), photo: v } })}
+              onChange={(v) => persistByPath(["about", "photo"], v)}
               fit="cover"
               height={320}
               className="w-full"
@@ -235,11 +311,11 @@ export default function App() {
           </div>
           <div>
             <EditableText
-              admin={isAdmin}
+              admin={canEdit}
               as="p"
               className="text-lg leading-relaxed opacity-90"
               value={c?.about?.text ?? ""}
-              onChange={(v) => save({ ...c, about: { ...(c.about || {}), text: v } })}
+              onChange={(v) => persistByPath(["about", "text"], v)}
             />
             <div className="mt-6 flex flex-wrap gap-2">
               {(c?.about?.skills ?? []).map((s, i) => (
@@ -249,21 +325,21 @@ export default function App() {
                 >
                   <EditableText
                     value={s}
-                    admin={isAdmin}
+                    admin={canEdit}
                     onChange={(v) => {
                       const next = [...(c.about?.skills ?? [])];
                       next[i] = v;
-                      save({ ...c, about: { ...(c.about || {}), skills: next } });
+                      persistByPath(["about", "skills"], next);
                     }}
                   />
-                  {isAdmin && (
+                  {canEdit && (
                     <button
                       type="button"
                       className="absolute -right-2 -top-2 hidden h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-white group-hover:flex"
                       onClick={() => {
                         const next = [...(c.about?.skills ?? [])];
                         next.splice(i, 1);
-                        save({ ...c, about: { ...(c.about || {}), skills: next } });
+                        persistByPath(["about", "skills"], next);
                       }}
                     >
                       ×
@@ -271,13 +347,13 @@ export default function App() {
                   )}
                 </span>
               ))}
-              {isAdmin && (
+              {canEdit && (
                 <button
                   type="button"
                   className="rounded-full border px-3 py-1 text-sm opacity-70 hover:opacity-100"
                   onClick={() => {
                     const next = [...(c.about?.skills ?? []), "Новый тег"];
-                    save({ ...c, about: { ...(c.about || {}), skills: next } });
+                    persistByPath(["about", "skills"], next);
                   }}
                 >
                   + тег
@@ -294,22 +370,23 @@ export default function App() {
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-semibold md:text-4xl">
             <EditableText
-              admin={isAdmin}
+              admin={canEdit}
               value={c?.strings?.projectsTitle ?? "Проекты"}
-              onChange={(v) => save({ ...c, strings: { ...(c.strings || {}), projectsTitle: v } })}
+              onChange={(v) => persistByPath(["strings", "projectsTitle"], v)}
             />
           </h2>
         </div>
         <ProjectsCarousel
           projects={c?.projects ?? []}
           strings={c?.strings ?? {}}
-          admin={isAdmin}
+          admin={canEdit}
           onMutateProject={(id, patch) => {
             const next = {
               ...c,
               projects: (c.projects ?? []).map((x) => (x.id === id ? { ...x, ...patch } : x)),
             };
-            save(next);
+            setContent(next);
+            saveContent(next).catch(console.error);
           }}
           onAddProject={() => {
             const next = {
@@ -327,11 +404,13 @@ export default function App() {
                 },
               ],
             };
-            save(next);
+            setContent(next);
+            saveContent(next).catch(console.error);
           }}
           onRemoveLast={() => {
             const next = { ...c, projects: (c.projects ?? []).slice(0, -1) };
-            save(next);
+            setContent(next);
+            saveContent(next).catch(console.error);
           }}
           hoverLocalRef={hoverLocalRef}
         />
@@ -342,9 +421,9 @@ export default function App() {
       <div className="grid h-full grid-rows-[auto_1fr] gap-6">
         <h2 className="text-2xl font-semibold md:text-4xl">
           <EditableText
-            admin={isAdmin}
+            admin={canEdit}
             value={c?.strings?.photosTitle ?? "Фото"}
-            onChange={(v) => save({ ...c, strings: { ...(c.strings || {}), photosTitle: v } })}
+            onChange={(v) => persistByPath(["strings", "photosTitle"], v)}
           />
         </h2>
         <div
@@ -364,14 +443,14 @@ export default function App() {
             return (
               <div key={i} className="relative mb-4 w-full break-inside-avoid">
                 <EditableImage
-                  admin={isAdmin}
+                  admin={canEdit}
                   src={photo.src}
                   alt={"Фото " + (i + 1)}
                   onImageClick={() => setLbIdx(i)}
                   onChange={(v) => {
                     const photos = [...(c.photos ?? [])];
                     photos[i] = { ...photo, src: v };
-                    save({ ...c, photos });
+                    persistByPath(["photos"], photos);
                   }}
                   fit={photo.fit}
                   height={photo.h}
@@ -379,21 +458,21 @@ export default function App() {
                   onMetaChange={(chg) => {
                     const photos = [...(c.photos ?? [])];
                     photos[i] = { ...photo, ...chg };
-                    save({ ...c, photos });
+                    persistByPath(["photos"], photos);
                   }}
                 />
               </div>
             );
           })}
         </div>
-        {isAdmin && (
+        {canEdit && (
           <div className="mt-2 flex flex-wrap gap-3">
             <button
               type="button"
               className="rounded-xl border px-4 py-2 text-sm hover:bg-neutral-900/5 dark:hover:bg-white/10"
               onClick={() => {
                 const photos = [...(c.photos ?? []), { src: "", fit: "cover", h: 240, w: 100 }];
-                save({ ...c, photos });
+                persistByPath(["photos"], photos);
               }}
             >
               + Добавить фото
@@ -403,7 +482,7 @@ export default function App() {
               className="rounded-xl border px-4 py-2 text-sm hover:bg-rose-500/10"
               onClick={() => {
                 const photos = [...(c.photos ?? [])].slice(0, -1);
-                save({ ...c, photos });
+                persistByPath(["photos"], photos);
               }}
             >
               − Удалить последнее
@@ -423,81 +502,54 @@ export default function App() {
     </Section>,
   ];
 
+  const sectionsCount = sections.length;
   const renderTripled = (copyIndex) =>
     sections.map((s, i) => React.cloneElement(s, { key: `${copyIndex}-${i}` }));
 
+  // Подключаем «кольцо» + мягкую докрутку
+  const { scrollToIndex, scrollToProgress } = useInfiniteSections(scrollerRef, progressRef, {
+    onIndex: setIdx,
+    onProgress: setPUI,
+    sectionsCount,           // число реальных секций
+    hoverLocalRef,
+    loop: true,              // кольцо
+    loopClones: sectionsCount, // слева и справа по набору клонов (мы рендерим три комплекта)
+    snapThreshold: 0.04,     // ~4% порог для докрутки
+    intentPx: 4,             // легче переходить вперёд/назад
+    snapIdleMs: 90,          // быстрее срабатывает после остановки
+  });
+
+  const [lbIdx, setLbIdx] = useState(-1);
+  const closeLB = () => setLbIdx(-1);
+  const prevLB = () => setLbIdx((i) => (i > 0 ? i - 1 : (c.photos || []).length - 1));
+  const nextLB = () => setLbIdx((i) => (i + 1) % (c.photos || []).length);
+
   return (
-    <div className="relative min-h-screen">
+    <>
       <style>{`#scroller{scrollbar-width:none;-ms-overflow-style:none}#scroller::-webkit-scrollbar{display:none}`}</style>
       <Background3D progressRef={progressRef} />
       <CustomCursor />
 
-      {/* top bar */}
-      <div className="fixed left-0 right-0 top-4 z-40 flex items-center justify-between px-6 md:px-10">
-        <div className="flex items-center gap-3 rounded-2xl bg-white/90 px-4 py-2 shadow backdrop-blur dark:bg-neutral-900/90">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-          <span className="font-semibold">
-            <EditableText
-              admin={isAdmin}
-              value={c?.site?.name ?? ""}
-              onChange={(v) => save({ ...c, site: { ...(c.site || {}), name: v } })}
-            />
-          </span>
-          <span className="hidden text-sm opacity-80 sm:inline">
-            <EditableText
-              admin={isAdmin}
-              value={c?.site?.role ?? ""}
-              onChange={(v) => save({ ...c, site: { ...(c.site || {}), role: v } })}
-            />
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            href={c?.socials?.instagram ?? "#"}
-            target="_blank"
-            className="rounded-xl bg-white/90 p-2 shadow backdrop-blur hover:scale-105 dark:bg-neutral-900/90"
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="2" width="20" height="20" rx="5" />
-              <circle cx="12" cy="12" r="3.5" />
-              <circle cx="17.5" cy="6.5" r="1.5" />
-            </svg>
-          </a>
-          <a
-            href={c?.socials?.telegram ?? "#"}
-            target="_blank"
-            className="rounded-xl bg-white/90 p-2 shadow backdrop-blur hover:scale-105 dark:bg-neutral-900/90"
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <circle cx="12" cy="12" r="10" opacity="0.15" />
-              <path d="M20.5 5.5L4.5 12.5l5.6 1.7 7.1-7.1-5.9 8.4.4 2.9 2.1-2 3-11.9z" />
-            </svg>
-          </a>
-          <button
-            type="button"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="rounded-xl bg-white/90 p-2 shadow backdrop-blur hover:scale-105 dark:bg-neutral-900/90"
-          >
-            {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setCmsOpen(true)}
-            className="rounded-xl bg-white/90 p-2 shadow backdrop-blur hover:scale-105 dark:bg-neutral-900/90"
-          >
-            <Settings className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
+      <TopBar c={c} isAdmin={isAdmin} setTheme={setTheme} theme={theme} onOpenCMS={handleCMS} />
 
-      {/* горизонтальная лента секций */}
       <div
         id="scroller"
         ref={scrollerRef}
-        className="flex overflow-x-auto"
-        style={{ height: "100svh", scrollSnapType: "none", overscrollBehaviorX: "none" }}
+        className="flex overflow-x-auto overflow-y-hidden"
+        style={{
+          height: "100svh",
+          scrollSnapType: "none",
+          overscrollBehaviorX: "contain", // чтобы страница снаружи не перехватывала
+        }}
       >
-        <div className="flex">{renderTripled("a")}{renderTripled("b")}{renderTripled("c")}</div>
+        <div className="flex">
+          {/* ЛЕВЫЕ клоны */}
+          {renderTripled("a")}
+          {/* РЕАЛЬНЫЕ */}
+          {renderTripled("b")}
+          {/* ПРАВЫЕ клоны */}
+          {renderTripled("c")}
+        </div>
       </div>
 
       {/* ползунок прогресса */}
@@ -534,6 +586,14 @@ export default function App() {
         refreshAuth={refreshAuth}
       />
       <Lightbox images={c?.photos ?? []} index={lbIdx} onClose={closeLB} onPrev={prevLB} onNext={nextLB} />
-    </div>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <EditModeProvider>
+      <AppInner />
+    </EditModeProvider>
   );
 }
