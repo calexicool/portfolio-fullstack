@@ -22,6 +22,9 @@ export default function CMSPanel({
   const [tab, setTab] = useState('login'); // 'login' | 'add'
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s || '').trim());
+  const hasPass = (s) => (s || '').trim().length > 0;
+
 
   // формы
   const [email, setEmail] = useState('');
@@ -252,17 +255,23 @@ export default function CMSPanel({
                     <input
                       className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none"
                       placeholder="email"
+                      required
                       value={email}
                       onChange={(e)=>setEmail(e.target.value)}
                     />
-                    <input
+                    <input                    
                       className="w-full rounded-lg bg-white/10 px-3 py-2 outline-none"
                       placeholder="пароль"
                       type="password"
+                      required
                       value={password}
                       onChange={(e)=>setPassword(e.target.value)}
                     />
-                    <button className="rounded bg-white px-4 py-2 text-neutral-900" onClick={handleLogin} disabled={busy}>
+                    <button
+                      className="rounded bg-white px-4 py-2 text-neutral-900 disabled:opacity-50"
+                      onClick={handleLogin}
+                      disabled={busy || !isEmail(email) || !hasPass(password)}
+                    >
                       {busy ? 'Вход…' : 'Войти'}
                     </button>
                   </>
