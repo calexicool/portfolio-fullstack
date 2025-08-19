@@ -23,6 +23,12 @@ app.use((req, _res, next) => {
   next();
 });
 
+const clientDir = path.join(__dirname, '../frontend/dist');
+app.use(express.static(clientDir));
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api')) return res.status(404).end();
+  res.sendFile(path.join(clientDir, 'index.html'));
+});
 /* ================= uploads ================= */
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });

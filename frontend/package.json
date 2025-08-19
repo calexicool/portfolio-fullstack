@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "npm --prefix ../frontend ci && npm --prefix ../frontend run build",
-    "preview": "vite preview --port 5173"
+    "preview": "vite preview --port 5173",
+    "start": "node backend/server.js"
   },
   "dependencies": {
     "react": "^18.2.0",
